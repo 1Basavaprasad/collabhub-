@@ -1,0 +1,1 @@
+"""CollabHub application package."""
