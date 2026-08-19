@@ -1,6 +1,7 @@
 from typing import Optional
 # pyrefly: ignore [missing-import]
 from pydantic import computed_field
+# pyrefly: ignore [missing-import]
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,6 +9,13 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "CollabHub"
     ENVIRONMENT: str = "development"
     API_V1_STR: str = "/api/v1"
+
+
+
+    # JWT Authentication Settings
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # PostgreSQL Database Settings
     POSTGRES_SERVER: str = "localhost"
