@@ -9,7 +9,16 @@ class RegisterRequest(BaseModel):
     password: str
 
 
-
 class LoginRequest(BaseModel):
     email: EmailStr
-    password:str
+    password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str

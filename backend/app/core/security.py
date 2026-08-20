@@ -10,6 +10,10 @@ import jwt
 
 from app.core.config import settings
 
+import hashlib
+
+import secrets
+
 
 password_hasher = PasswordHasher()
 
@@ -53,3 +57,13 @@ def decode_access_token(token: str) -> dict:
 
     except jwt.PyJWTError as exc:
         raise ValueError("Invalid or expired token") from exc
+
+
+
+
+def generate_password_reset_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

@@ -8,8 +8,20 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.security import create_access_token
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest
-from app.services.auth import login_user, register_user
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+)
+
+
+from app.services.auth import (
+    forgot_password,
+    login_user,
+    register_user,
+    reset_password,
+)
 
 
 router = APIRouter(
@@ -73,3 +85,43 @@ def get_me(
         "username": current_user.username,
         "full_name": current_user.full_name,
     }
+
+
+
+@router.post("/forgot-password")
+def forgot_password_request(
+    data: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    reset_token = forgot_password(db, data.email)
+
+    return {
+        "message": "If the email is registered, a password reset token has been generated",
+        "reset_token": reset_token,
+    }
+
+
+@router.post("/reset-password")
+def reset_password_request(
+    data: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        reset_password(
+            db=db,
+            token=data.token,
+            new_password=data.new_password,
+        )
+
+        return {
+            "message": "Password reset successfully",
+        }
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+
+
