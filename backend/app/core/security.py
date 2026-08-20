@@ -5,6 +5,7 @@ from argon2.exceptions import VerifyMismatchError
 
 from datetime import datetime, timedelta, timezone
 
+# pyrefly: ignore [missing-import]
 import jwt
 
 from app.core.config import settings
@@ -39,3 +40,16 @@ def create_access_token(user_id: str) -> str:
         settings.JWT_SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM,
     )
+
+def decode_access_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+
+        return payload
+
+    except jwt.PyJWTError as exc:
+        raise ValueError("Invalid or expired token") from exc
