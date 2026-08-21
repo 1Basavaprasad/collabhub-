@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   loginApi, 
   registerApi, 
@@ -52,7 +53,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Fetch current user from /auth/me
-  const fetchCurrentUser = useCallback(async (authToken) => {
+  const fetchCurrentUser = useCallback(async () => {
     try {
       const userData = await getMeApi();
       setUser(userData);
@@ -78,7 +79,7 @@ export const AuthProvider = ({ children }) => {
       const savedToken = localStorage.getItem('collabhub_token');
       if (savedToken) {
         try {
-          await fetchCurrentUser(savedToken);
+          await fetchCurrentUser();
         } catch {
           // Token was invalid / expired, already cleared in fetchCurrentUser
         }
@@ -118,7 +119,7 @@ export const AuthProvider = ({ children }) => {
     setToken(accessToken);
 
     // Fetch user details immediately
-    const userProfile = await fetchCurrentUser(accessToken);
+    const userProfile = await fetchCurrentUser();
     return { token: accessToken, user: userProfile, tokenType: data.token_type };
   };
 
@@ -157,7 +158,7 @@ export const AuthProvider = ({ children }) => {
     resetPassword,
     logout,
     checkHealth,
-    refreshUser: () => (token ? fetchCurrentUser(token) : Promise.resolve(null)),
+    refreshUser: () => (token ? fetchCurrentUser() : Promise.resolve(null)),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,7 +1,7 @@
-import React from 'react';
 import { Navigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Loader2, Sparkles } from 'lucide-react';
+import LoadingSpinner from './LoadingSpinner';
+import { Layers } from 'lucide-react';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -9,20 +9,21 @@ const ProtectedRoute = ({ children }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-200">
-        <div className="relative flex items-center justify-center mb-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 animate-pulse flex items-center justify-center shadow-lg shadow-indigo-500/25">
-            <Sparkles className="w-8 h-8 text-white animate-spin" style={{ animationDuration: '3s' }} />
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 bg-mesh">
+        <div className="flex flex-col items-center gap-4 animate-fade-in">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-xl shadow-indigo-600/30">
+            <Layers className="h-6 w-6 text-white" />
           </div>
-          <Loader2 className="w-20 h-20 text-indigo-500/30 animate-spin absolute" />
+          <div className="flex items-center gap-2.5 text-xs text-slate-400 font-mono">
+            <LoadingSpinner size="sm" />
+            <span>Verifying session credentials...</span>
+          </div>
         </div>
-        <p className="text-sm font-medium text-slate-400 tracking-wide">Authenticating session...</p>
       </div>
     );
   }
 
   if (!isAuthenticated) {
-    // Redirect to login page and preserve requested path
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

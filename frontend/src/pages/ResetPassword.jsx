@@ -1,61 +1,48 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-
-import {
-  Layers,
-  Lock,
-  Eye,
-  EyeOff,
-  ArrowRight,
-  AlertCircle,
-  Loader2,
-  CheckCircle2,
-  ShieldCheck,
-} from 'lucide-react';
+import PasswordInput from '../components/PasswordInput';
+import Button from '../components/Button';
+import Alert from '../components/Alert';
+import { Layers, ArrowRight, CheckCircle2, ShieldCheck, Check, X, Server } from 'lucide-react';
 
 const RESET_TOKEN_STORAGE_KEY = 'collabhub_reset_token';
 
-/*
- * Individual password requirement
- */
-const PasswordRequirement = ({ passed, text }) => (
+const RequirementCheck = ({ passed, text }) => (
   <div
-    className={`flex items-center gap-2 ${passed ? 'text-emerald-400' : 'text-slate-500'
-      }`}
+    className={`flex items-center gap-1.5 text-xs transition-colors duration-150 ${
+      passed ? 'text-emerald-400 font-medium' : 'text-slate-500'
+    }`}
   >
     <span
-      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${passed ? 'bg-emerald-500/15' : 'bg-slate-800'
-        }`}
+      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+        passed
+          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+          : 'bg-slate-800 text-slate-500 border border-slate-700'
+      }`}
     >
       {passed ? '✓' : '•'}
     </span>
-
     <span>{text}</span>
   </div>
 );
 
 const ResetPassword = () => {
   const { resetPassword, healthInfo } = useAuth();
-
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   /*
-   * Email link:
-   *
-   * /reset-password?token=ABC123
-   *
-   * The token is read internally.
-   * It is never displayed to the user.
+   * Read token silently from URL (?token=...)
+   * The token is captured internally and NEVER displayed in a visible input field.
    */
   const urlToken = searchParams.get('token') || '';
 
-  const [resetToken, setResetToken] = useState(() => {
+  const [resetToken] = useState(() => {
     if (urlToken) {
+      sessionStorage.setItem(RESET_TOKEN_STORAGE_KEY, urlToken);
       return urlToken;
     }
-
     return sessionStorage.getItem(RESET_TOKEN_STORAGE_KEY) || '';
   });
 
@@ -64,24 +51,20 @@ const ResetPassword = () => {
     confirm_password: '',
   });
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
   /*
-   * Password requirements
-   *
-   * These match the backend rules:
-   *
-   * 8+ characters
-   * Uppercase
-   * Lowercase
-   * Number
-   * Special character
+   * Strip token from visible URL bar if present in query parameters.
    */
+  useEffect(() => {
+    if (urlToken) {
+      navigate('/reset-password', { replace: true });
+    }
+  }, [urlToken, navigate]);
+
+  // Backend Password Security Requirements (auth.py)
   const passwordRequirements = {
     minLength: formData.new_password.length >= 8,
     uppercase: /[A-Z]/.test(formData.new_password),
@@ -90,88 +73,46 @@ const ResetPassword = () => {
     special: /[^A-Za-z0-9]/.test(formData.new_password),
   };
 
-  const passedRequirements = Object.values(passwordRequirements).filter(
-    Boolean
-  ).length;
+  const passedCount = Object.values(passwordRequirements).filter(Boolean).length;
+  const isPasswordStrong = passedCount === 5;
 
-  const passwordStrength =
-    passedRequirements <= 2
-      ? 'Weak'
-      : passedRequirements <= 4
-        ? 'Medium'
-        : 'Strong';
+  const strengthLabel =
+    passedCount <= 2 ? 'Weak' : passedCount <= 4 ? 'Medium' : 'Strong';
 
-  const passwordIsStrong = passedRequirements === 5;
+  const passwordsMatch =
+    formData.confirm_password.length > 0 &&
+    formData.new_password === formData.confirm_password;
 
-  /*
-   * Read token from email URL.
-   *
-   * Then remove the token from the visible URL.
-   */
-  useEffect(() => {
-    if (urlToken) {
-      sessionStorage.setItem(RESET_TOKEN_STORAGE_KEY, urlToken);
-      setResetToken(urlToken);
-
-      navigate('/reset-password', {
-        replace: true,
-      });
-    }
-  }, [urlToken, navigate]);
-
-  /*
-   * Handle password input changes.
-   */
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-
-    if (error) {
-      setError(null);
-    }
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (error) setError(null);
   };
 
-  /*
-   * Validate the form before sending to backend.
-   */
   const validateForm = () => {
     if (!resetToken.trim()) {
-      return 'Password reset link is invalid or missing. Please request a new password reset link.';
+      return 'Password reset link is invalid or has expired. Please request a new recovery link.';
     }
-
     if (!formData.new_password) {
       return 'Please enter a new password.';
     }
-
-    if (!passwordIsStrong) {
-      return 'Please choose a stronger password that meets all the requirements.';
+    if (!isPasswordStrong) {
+      return 'Please ensure your new password meets all 5 security requirements below.';
     }
-
     if (!formData.confirm_password) {
       return 'Please confirm your new password.';
     }
-
     if (formData.new_password !== formData.confirm_password) {
       return 'Passwords do not match. Please verify.';
     }
-
     return null;
   };
 
-  /*
-   * Submit new password.
-   */
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     setError(null);
 
     const validationError = validateForm();
-
     if (validationError) {
       setError(validationError);
       return;
@@ -180,49 +121,31 @@ const ResetPassword = () => {
     setLoading(true);
 
     try {
-      /*
-       * Token is stored internally.
-       * It is never taken from a visible input.
-       */
-      const response = await resetPassword(
-        resetToken.trim(),
-        formData.new_password
-      );
-
-      /*
-       * Password reset successful.
-       */
+      await resetPassword(resetToken.trim(), formData.new_password);
       setSuccess(true);
-
-      /*
-       * Remove the token after successful use.
-       */
+      // Clean up token after successful use
       sessionStorage.removeItem(RESET_TOKEN_STORAGE_KEY);
-
-      console.log(
-        response?.message || 'Password reset successfully'
-      );
     } catch (err) {
       if (err.response) {
         if (err.response.status === 400) {
           setError(
             err.response.data?.detail ||
-            'Invalid or expired password reset link. Please request a new one.'
+              'Invalid or expired password reset link. Please request a new reset link.'
           );
         } else if (err.response.status === 422) {
           setError(
             err.response.data?.detail ||
-            'Password does not meet the required security rules.'
+              'Password does not meet the required security specifications.'
           );
         } else {
           setError(
             err.response.data?.detail ||
-            'Password reset failed. Please try again.'
+              'Password reset failed. Please try again.'
           );
         }
       } else if (err.request) {
         setError(
-          'Cannot connect to CollabHub backend. Please make sure the server is running on port 8001.'
+          'Cannot connect to the CollabHub backend. Please verify port 8001 is active.'
         );
       } else {
         setError('An unexpected error occurred. Please try again.');
@@ -232,9 +155,6 @@ const ResetPassword = () => {
     }
   };
 
-  /*
-   * Navigate to login.
-   */
   const handleContinueToLogin = () => {
     navigate('/login', {
       state: {
@@ -244,382 +164,245 @@ const ResetPassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-mesh relative selection:bg-indigo-500/30 selection:text-indigo-200">
+    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-mesh relative selection:bg-indigo-500/30 selection:text-indigo-200">
+      {/* Background ambient lighting */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[460px] h-[460px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute inset-0 bg-grid-pattern opacity-25 pointer-events-none" />
 
-      {/* Background accents */}
-      <div className="absolute top-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative z-10 w-full max-w-[460px] space-y-6">
+        
+        {/* Brand Header */}
+        <div className="text-center space-y-2">
+          <Link to="/" className="inline-flex items-center gap-2.5 group">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-600/25 border border-indigo-400/30 group-hover:scale-105 transition-transform">
+              <Layers className="h-6 w-6" />
+            </div>
+            <span className="text-2xl font-bold tracking-tight text-white">
+              Collab<span className="text-indigo-400">Hub</span>
+            </span>
+          </Link>
 
-      <div className="absolute bottom-1/4 right-1/3 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-
-        {/* Logo */}
-        <div className="flex justify-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 shadow-xl shadow-indigo-500/25 border border-indigo-400/30">
-            <Layers className="h-8 w-8 text-white" />
+          <div className="pt-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[11px] font-semibold uppercase tracking-wider mb-2 font-mono">
+              <ShieldCheck className="h-3 w-3" />
+              <span>Security Terminal</span>
+            </div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-white">
+              {success ? 'Password reset successfully' : 'Create new password'}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-sm mx-auto">
+              {success
+                ? 'Your password has been updated. You can now sign in using your new password.'
+                : 'Set a strong new password for your CollabHub account'}
+            </p>
           </div>
         </div>
 
-        {/* Title */}
-        <h2 className="mt-5 text-center text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-          {success ? (
-            <>
-              Password{' '}
-              <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                reset
-              </span>
-            </>
-          ) : (
-            <>
-              Create new{' '}
-              <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                password
-              </span>
-            </>
-          )}
-        </h2>
-
-        <p className="mt-2 text-center text-sm text-slate-400">
-          {success
-            ? 'Your CollabHub password has been updated successfully'
-            : 'Enter a strong new password to secure your CollabHub account'}
-        </p>
-      </div>
-
-      {/* Main card */}
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4 sm:px-0">
-
-        <div className="glass-panel rounded-2xl py-8 px-6 sm:px-10 shadow-2xl shadow-black/40 border border-slate-800/80">
-
+        {/* Card Panel */}
+        <div className="glass-panel rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/60 border border-slate-800/80 space-y-5">
+          
           {/* SUCCESS STATE */}
           {success ? (
-            <div className="animate-fadeIn">
-
-              {/* Success message */}
-              <div className="flex items-start gap-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-5 text-emerald-300">
-
+            <div className="space-y-5 animate-fade-in">
+              <div className="flex items-start gap-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 p-4 text-emerald-300">
                 <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-400 mt-0.5" />
-
-                <div className="leading-relaxed">
-
-                  <span className="font-semibold text-emerald-200 block mb-1">
-                    Password reset successful!
-                  </span>
-
-                  <span className="text-sm text-emerald-300">
-                    Your password has been updated successfully.
-                    You can now sign in with your new password.
-                  </span>
-
+                <div className="leading-relaxed text-xs">
+                  <h4 className="font-semibold text-emerald-200 text-sm">
+                    Password reset successfully
+                  </h4>
+                  <p className="mt-1 text-slate-300">
+                    Your password has been updated. You can now sign in using your new password.
+                  </p>
                 </div>
-
               </div>
 
-              {/* Continue button */}
-              <button
-                type="button"
-                onClick={handleContinueToLogin}
-                className="group mt-5 flex w-full justify-center items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-2.5 px-4 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 hover:from-indigo-500 hover:to-purple-500 hover:shadow-indigo-500/40 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-950 transition-all duration-200 cursor-pointer"
-              >
-                <span>Continue to Sign In</span>
-
-                <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-              </button>
-
+              <div className="pt-1">
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={handleContinueToLogin}
+                  icon={ArrowRight}
+                  iconPosition="right"
+                  className="w-full"
+                >
+                  Continue to Sign In
+                </Button>
+              </div>
             </div>
           ) : (
+            /* FORM STATE */
             <>
-              {/* ERROR MESSAGE */}
-              {error && (
-                <div className="mb-6 flex items-start gap-3 rounded-xl bg-rose-500/10 border border-rose-500/30 p-3.5 text-rose-300 text-xs">
-
-                  <AlertCircle className="h-5 w-5 shrink-0 text-rose-400 mt-0.5" />
-
-                  <div className="leading-relaxed">
-
-                    <span className="font-semibold text-rose-200 block mb-0.5">
-                      Reset Error
-                    </span>
-
-                    {error}
-
-                  </div>
-
-                </div>
+              {/* Warning if no token exists in memory/session */}
+              {!resetToken && (
+                <Alert variant="warning" title="Missing Reset Token">
+                  No active reset token was detected in your session. Please open the link sent to your email or request a new recovery link.
+                </Alert>
               )}
 
-              {/* PASSWORD FORM */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <Alert
+                  variant="error"
+                  title="Reset Error"
+                  onClose={() => setError(null)}
+                >
+                  {error}
+                </Alert>
+              )}
 
+              <form onSubmit={handleSubmit} className="space-y-3.5">
                 {/* New Password */}
                 <div>
+                  <PasswordInput
+                    id="new_password"
+                    name="new_password"
+                    label="New Password"
+                    required
+                    autoComplete="new-password"
+                    value={formData.new_password}
+                    onChange={handleChange}
+                    placeholder="Create a strong password"
+                  />
 
-                  <label
-                    htmlFor="new_password"
-                    className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5"
-                  >
-                    New Password
-                  </label>
-
-                  <div className="relative rounded-xl shadow-sm">
-
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                      <Lock className="h-4 w-4" />
-                    </div>
-
-                    <input
-                      id="new_password"
-                      name="new_password"
-                      type={showPassword ? 'text' : 'password'}
-                      autoComplete="new-password"
-                      required
-                      value={formData.new_password}
-                      onChange={handleChange}
-                      placeholder="Create a strong password"
-                      className="block w-full rounded-xl border border-slate-700/80 bg-slate-900/90 pl-10 pr-11 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-slate-200 transition-colors focus:outline-none"
-                      aria-label={
-                        showPassword ? 'Hide password' : 'Show password'
-                      }
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-
-                  </div>
-
-                  {/* PASSWORD STRENGTH */}
+                  {/* Password Strength Checklist */}
                   {formData.new_password && (
-                    <div className="mt-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-
-                      {/* Strength title */}
-                      <div className="flex items-center justify-between mb-2">
-
-                        <span className="text-xs font-semibold text-slate-300">
-                          Password strength
-                        </span>
-
+                    <div className="mt-2.5 rounded-xl border border-slate-800 bg-slate-900/60 p-3 space-y-2 animate-fade-in">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400 font-medium">Strength:</span>
                         <span
-                          className={`text-xs font-bold ${passwordStrength === 'Strong'
+                          className={`font-bold font-mono ${
+                            strengthLabel === 'Strong'
                               ? 'text-emerald-400'
-                              : passwordStrength === 'Medium'
-                                ? 'text-amber-400'
-                                : 'text-rose-400'
-                            }`}
+                              : strengthLabel === 'Medium'
+                              ? 'text-amber-400'
+                              : 'text-rose-400'
+                          }`}
                         >
-                          {passwordStrength}
+                          {strengthLabel}
                         </span>
-
                       </div>
 
-                      {/* Strength bar */}
-                      <div className="flex gap-1 mb-3">
-
-                        {[1, 2, 3, 4, 5].map((level) => (
+                      {/* Progress bars */}
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map((lvl) => (
                           <div
-                            key={level}
-                            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${level <= passedRequirements
-                                ? passwordStrength === 'Strong'
-                                  ? 'bg-emerald-500'
-                                  : passwordStrength === 'Medium'
-                                    ? 'bg-amber-500'
-                                    : 'bg-rose-500'
-                                : 'bg-slate-700'
-                              }`}
+                            key={lvl}
+                            className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                              lvl <= passedCount
+                                ? strengthLabel === 'Strong'
+                                ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
+                                : strengthLabel === 'Medium'
+                                ? 'bg-amber-500'
+                                : 'bg-rose-500'
+                              : 'bg-slate-800'
+                            }`}
                           />
                         ))}
-
                       </div>
 
-                      {/* Requirements */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
-
-                        <PasswordRequirement
+                      {/* Requirements Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                        <RequirementCheck
                           passed={passwordRequirements.minLength}
-                          text="8+ characters"
+                          text="At least 8 characters"
                         />
-
-                        <PasswordRequirement
+                        <RequirementCheck
                           passed={passwordRequirements.uppercase}
-                          text="Uppercase letter"
+                          text="One uppercase letter"
                         />
-
-                        <PasswordRequirement
+                        <RequirementCheck
                           passed={passwordRequirements.lowercase}
-                          text="Lowercase letter"
+                          text="One lowercase letter"
                         />
-
-                        <PasswordRequirement
+                        <RequirementCheck
                           passed={passwordRequirements.number}
-                          text="Number"
+                          text="One number"
                         />
-
-                        <PasswordRequirement
+                        <RequirementCheck
                           passed={passwordRequirements.special}
-                          text="Special character"
+                          text="One special character"
                         />
-
                       </div>
-
                     </div>
                   )}
-
                 </div>
 
                 {/* Confirm Password */}
                 <div>
+                  <PasswordInput
+                    id="confirm_password"
+                    name="confirm_password"
+                    label="Confirm New Password"
+                    required
+                    autoComplete="new-password"
+                    value={formData.confirm_password}
+                    onChange={handleChange}
+                    placeholder="Re-enter your new password"
+                  />
 
-                  <label
-                    htmlFor="confirm_password"
-                    className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5"
-                  >
-                    Confirm New Password
-                  </label>
-
-                  <div className="relative rounded-xl shadow-sm">
-
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                      <Lock className="h-4 w-4" />
-                    </div>
-
-                    <input
-                      id="confirm_password"
-                      name="confirm_password"
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      autoComplete="new-password"
-                      required
-                      value={formData.confirm_password}
-                      onChange={handleChange}
-                      placeholder="Re-enter your new password"
-                      className="block w-full rounded-xl border border-slate-700/80 bg-slate-900/90 pl-10 pr-11 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-slate-200 transition-colors focus:outline-none"
-                      aria-label={
-                        showConfirmPassword
-                          ? 'Hide password'
-                          : 'Show password'
-                      }
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-
-                  </div>
-
-                  {/* Password match indicator */}
                   {formData.confirm_password && (
                     <div
-                      className={`mt-2 text-xs font-medium ${formData.new_password ===
-                          formData.confirm_password
-                          ? 'text-emerald-400'
-                          : 'text-rose-400'
-                        }`}
+                      className={`mt-1.5 text-xs font-medium flex items-center gap-1.5 animate-fade-in ${
+                        passwordsMatch ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
                     >
-                      {formData.new_password ===
-                        formData.confirm_password
-                        ? '✓ Passwords match'
-                        : '✗ Passwords do not match'}
+                      {passwordsMatch ? (
+                        <>
+                          <Check className="h-3.5 w-3.5" />
+                          <span>Passwords match</span>
+                        </>
+                      ) : (
+                        <>
+                          <X className="h-3.5 w-3.5" />
+                          <span>Passwords do not match</span>
+                        </>
+                      )}
                     </div>
                   )}
-
                 </div>
 
-                {/* Reset button */}
+                {/* Submit Button */}
                 <div className="pt-2">
-
-                  <button
+                  <Button
                     type="submit"
                     id="reset-password-submit-btn"
-                    disabled={loading || !passwordIsStrong}
-                    className="group relative flex w-full justify-center items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-2.5 px-4 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 hover:from-indigo-500 hover:to-purple-500 hover:shadow-indigo-500/40 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-950 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    loading={loading}
+                    disabled={!isPasswordStrong || !resetToken}
+                    icon={ArrowRight}
+                    iconPosition="right"
+                    className="w-full"
+                    size="md"
                   >
-
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Resetting password...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Reset Password</span>
-                        <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-                      </>
-                    )}
-
-                  </button>
-
-                  {!passwordIsStrong && formData.new_password && (
-                    <p className="mt-2 text-center text-[11px] text-slate-500">
-                      Complete all password requirements to continue.
-                    </p>
-                  )}
-
+                    {loading ? 'Updating password...' : 'Reset Password'}
+                  </Button>
                 </div>
-
               </form>
 
-              {/* Back to login */}
-              <div className="mt-6 pt-6 border-t border-slate-800/80 text-center">
-
+              <div className="pt-4 border-t border-slate-800/80 text-center">
                 <p className="text-xs text-slate-400">
-
                   Remember your password?{' '}
-
                   <Link
                     to="/login"
-                    className="font-semibold text-indigo-400 hover:text-indigo-300 transition-colors underline-offset-4 hover:underline"
+                    className="font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
                   >
                     Sign in &rarr;
                   </Link>
-
                 </p>
-
               </div>
             </>
           )}
 
         </div>
 
-        {/* Backend health */}
-        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400">
-
-          <ShieldCheck className="h-3.5 w-3.5 text-indigo-400" />
-
-          <span>CollabHub FastAPI Service:</span>
-
-          <span
-            className={`font-mono font-medium ${healthInfo.isOnline
-                ? 'text-emerald-400'
-                : 'text-slate-400'
-              }`}
-          >
-            {healthInfo.isOnline
-              ? 'Connected (Port 8001)'
-              : 'Checking...'}
+        {/* Bottom Health Badge */}
+        <div className="flex items-center justify-center gap-2 text-xs text-slate-400 font-mono">
+          <Server className="h-3.5 w-3.5 text-indigo-400" />
+          <span>FastAPI Service:</span>
+          <span className={healthInfo.isOnline ? 'text-emerald-400 font-semibold' : 'text-slate-400'}>
+            {healthInfo.isOnline ? 'Healthy' : 'Checking...'}
           </span>
-
         </div>
 
       </div>
-
     </div>
   );
 };
