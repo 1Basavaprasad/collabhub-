@@ -331,7 +331,11 @@ export const CompanyProvider = ({ children }) => {
         department,
       });
       setMembers((prev) =>
-        prev.map((m) => (m.user_id === userId ? updated : m))
+        prev.map((m) =>
+          m.user_id === userId || m.user?.id === userId
+            ? { ...m, ...updated, user: m.user || updated.user }
+            : m
+        )
       );
       return updated;
     } catch (err) {
@@ -356,7 +360,7 @@ export const CompanyProvider = ({ children }) => {
   // Determine current user's membership and permissions in the active company
   const currentUserMembership = useMemo(() => {
     if (!user?.id || !Array.isArray(members) || members.length === 0) return null;
-    return members.find((m) => m.user_id === user.id) || null;
+    return members.find((m) => m.user_id === user.id || m.user?.id === user.id) || null;
   }, [user?.id, members]);
 
   const currentUserRole = currentUserMembership?.role || 'MEMBER';

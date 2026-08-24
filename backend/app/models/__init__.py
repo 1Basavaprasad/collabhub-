@@ -6,6 +6,9 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.company import Company
 from app.models.company_member import CompanyMember, CompanyRole
 from app.models.company_invitation import CompanyInvitation, InvitationStatus
+from app.models.team import Team
+from app.models.team_member import TeamMember, TeamRole
+from app.models.team_activity import TeamActivity
 
 __all__ = [
     "Base",
@@ -16,4 +19,8 @@ __all__ = [
     "CompanyRole",
     "CompanyInvitation",
     "InvitationStatus",
+    "Team",
+    "TeamMember",
+    "TeamRole",
+    "TeamActivity",
 ]

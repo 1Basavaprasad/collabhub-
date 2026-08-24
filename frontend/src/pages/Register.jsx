@@ -11,25 +11,20 @@ import {
   AtSign,
   Mail,
   ArrowRight,
-  ShieldCheck,
-  Building2,
-  Users2,
-  Sparkles,
-  Check,
-  X,
+  Server,
 } from 'lucide-react';
 
 const RequirementCheck = ({ passed, text }) => (
   <div
     className={`flex items-center gap-1.5 text-xs transition-colors duration-150 ${
-      passed ? 'text-emerald-400 font-medium' : 'text-slate-500'
+      passed ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-slate-400 dark:text-[#64748B]'
     }`}
   >
     <span
-      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
         passed
-          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-          : 'bg-slate-800 text-slate-500 border border-slate-700'
+          ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30'
+          : 'bg-slate-100 dark:bg-[#1B263A] text-slate-400 dark:text-[#64748B] border border-slate-200 dark:border-[#263449]'
       }`}
     >
       {passed ? '✓' : '•'}
@@ -39,7 +34,7 @@ const RequirementCheck = ({ passed, text }) => (
 );
 
 const Register = () => {
-  const { register } = useAuth();
+  const { register, healthInfo } = useAuth();
   const navigate = useNavigate();
 
   const location = useLocation();
@@ -70,9 +65,6 @@ const Register = () => {
   const passedCount = Object.values(passwordRequirements).filter(Boolean).length;
   const isPasswordStrong = passedCount === 5;
 
-  const strengthLabel =
-    passedCount <= 2 ? 'Weak' : passedCount <= 4 ? 'Medium' : 'Strong';
-
   const passwordsMatch =
     formData.confirm_password.length > 0 &&
     formData.password === formData.confirm_password;
@@ -100,17 +92,14 @@ const Register = () => {
     if (!emailRegex.test(formData.email.trim())) {
       return 'Please enter a valid email address.';
     }
-    if (!formData.password) {
-      return 'Please enter a password.';
-    }
     if (!isPasswordStrong) {
-      return 'Password must meet all 5 security requirements below.';
+      return 'Password does not meet all security complexity requirements.';
     }
     if (!formData.confirm_password) {
       return 'Please confirm your password.';
     }
     if (formData.password !== formData.confirm_password) {
-      return 'Passwords do not match. Please verify.';
+      return 'Passwords do not match.';
     }
     return null;
   };
@@ -129,24 +118,20 @@ const Register = () => {
     setLoading(true);
 
     try {
-      const response = await register({
+      await register({
         full_name: formData.full_name.trim(),
         username: formData.username.trim(),
         email: formData.email.trim(),
         password: formData.password,
       });
 
-      setSuccess(
-        response.message ||
-          'Account created successfully! Redirecting to sign in...'
-      );
+      setSuccess('Account created successfully! Redirecting to sign in...');
 
-      // Redirect user to login page after short delay with prefilled email
       setTimeout(() => {
-        const loginPath = redirectParam
+        const loginUrl = redirectParam
           ? `/login?redirect=${encodeURIComponent(redirectParam)}`
           : '/login';
-        navigate(loginPath, {
+        navigate(loginUrl, {
           state: {
             registered: true,
             email: formData.email.trim(),
@@ -158,22 +143,22 @@ const Register = () => {
         if (err.response.status === 409) {
           setError(
             err.response.data?.detail ||
-              'An account with this email or username already exists.'
+              'A user with this username or email already exists.'
           );
         } else if (err.response.status === 422) {
           setError(
             err.response.data?.detail ||
-              'Validation error: Please ensure all fields are properly formatted.'
+              'Please verify all form fields meet requirements.'
           );
         } else {
           setError(
             err.response.data?.detail ||
-              'Registration failed. Please check your information and try again.'
+              'Registration failed. Please try again.'
           );
         }
       } else if (err.request) {
         setError(
-          'Cannot reach the CollabHub backend server. Please verify port 8001 is active.'
+          'Cannot connect to the TeamX backend. Please verify port 8001 is active.'
         );
       } else {
         setError('An unexpected error occurred. Please try again.');
@@ -184,310 +169,191 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 bg-mesh relative flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* Background ambient lighting */}
-      <div className="absolute top-10 left-10 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-25 pointer-events-none" />
-
-      <div className="relative z-10 w-full max-w-6xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-          
-          {/* Left Column: Platform Hierarchy & Value Props (5 Cols on Desktop) */}
-          <div className="lg:col-span-5 space-y-7">
-            {/* Brand Header */}
-            <div>
-              <Link to="/" className="inline-flex items-center gap-3 group">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 shadow-xl shadow-indigo-600/25 border border-indigo-400/30 group-hover:scale-105 transition-transform">
-                  <Layers className="h-6 w-6 text-white" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-2xl font-bold tracking-tight text-white">
-                    Collab<span className="text-indigo-400">Hub</span>
-                  </span>
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 font-mono">
-                    Company Platform
-                  </span>
-                </div>
-              </Link>
-
-              <div className="mt-6 space-y-3">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 text-xs font-semibold">
-                  <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-                  <span>Company & Team Workspace</span>
-                </div>
-                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-                  One platform to manage your company teams and projects.
-                </h1>
-                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                  CollabHub structures your company workspace into dedicated teams, projects, and tasks with isolated multi-tenant security.
-                </p>
-              </div>
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-mesh selection:bg-indigo-500 selection:text-white">
+      <div className="w-full max-w-lg space-y-6">
+        
+        {/* Brand Header */}
+        <div className="text-center space-y-2">
+          <Link to="/" className="inline-flex items-center gap-2.5 group">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs font-bold text-base group-hover:scale-105 transition-transform">
+              <Layers className="h-5 w-5" />
             </div>
+            <span className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#F8FAFC]">
+              Team<span className="text-indigo-600 dark:text-indigo-400">X</span>
+            </span>
+          </Link>
 
-            {/* Architecture Hierarchy Highlights */}
-            <div className="space-y-3 pt-1">
-              <div className="flex items-start gap-3.5 p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/40 backdrop-blur-sm">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  <Building2 className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200">Company Multi-Tenancy</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Complete data isolation between independent registered companies.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3.5 p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/40 backdrop-blur-sm">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                  <Users2 className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200">Teams & Projects Hierarchy</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Organize backend, frontend, and DevOps teams with project task boards.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3.5 p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/40 backdrop-blur-sm">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  <ShieldCheck className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200">JWT Authenticated Access</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    FastAPI bearer token protection and bcrypt hashed credentials.
-                  </p>
-                </div>
-              </div>
-            </div>
-
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-[#F8FAFC]">
+              Create your TeamX account
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-[#94A3B8] mt-0.5">
+              Get started with enterprise workspace collaboration
+            </p>
           </div>
+        </div>
 
-          {/* Right Column: Structured Registration Card (7 Cols on Desktop) */}
-          <div className="lg:col-span-7">
-            <div className="glass-panel rounded-3xl p-6 sm:p-9 shadow-2xl shadow-black/60 border border-slate-800/80 space-y-5">
-              
-              {/* Card Header */}
-              <div>
-                <span className="inline-block text-[10px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 rounded-full mb-2 font-mono">
-                  Get Started
-                </span>
-                <h2 className="text-2xl font-extrabold tracking-tight text-white">
-                  Create your CollabHub account
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                  Fill in your details below to activate your account
-                </p>
-              </div>
+        {/* Auth Card */}
+        <div className="rounded-xl p-6 sm:p-8 shadow-xs bg-white dark:bg-[#151F32] border border-slate-200/80 dark:border-[#263449] space-y-4 animate-scale-in">
+          
+          {/* Success Banner */}
+          {success && (
+            <Alert variant="success" title="Account created!">
+              {success}
+            </Alert>
+          )}
 
-              {/* Success Banner */}
-              {success && (
-                <Alert variant="success" title="Account created!">
-                  {success}
-                </Alert>
-              )}
+          {/* Error Banner */}
+          {error && (
+            <Alert
+              variant="error"
+              title="Registration error"
+              onClose={() => setError(null)}
+            >
+              {error}
+            </Alert>
+          )}
 
-              {/* Error Banner */}
-              {error && (
-                <Alert
-                  variant="error"
-                  title="Registration Error"
-                  onClose={() => setError(null)}
-                >
-                  {error}
-                </Alert>
-              )}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Full Name */}
+              <Input
+                id="full_name"
+                name="full_name"
+                label="Full name"
+                required
+                placeholder="Jane Doe"
+                value={formData.full_name}
+                onChange={handleChange}
+                icon={User}
+                autoFocus
+              />
 
-              <form onSubmit={handleSubmit} className="space-y-3.5">
-                {/* Full Name & Username Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <Input
-                    id="full_name"
-                    name="full_name"
-                    type="text"
-                    label="Full Name"
-                    required
-                    autoComplete="name"
-                    value={formData.full_name}
-                    onChange={handleChange}
-                    placeholder="e.g. Alex Morgan"
-                    icon={User}
-                  />
-
-                  <Input
-                    id="username"
-                    name="username"
-                    type="text"
-                    label="Username"
-                    required
-                    autoComplete="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    placeholder="alexmorgan"
-                    icon={AtSign}
-                  />
-                </div>
-
-                {/* Email */}
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  label="Work Email Address"
-                  required
-                  autoComplete="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="name@company.com"
-                  icon={Mail}
-                />
-
-                {/* Password */}
-                <div>
-                  <PasswordInput
-                    id="password"
-                    name="password"
-                    label="Password"
-                    required
-                    autoComplete="new-password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    placeholder="Create a strong password"
-                  />
-
-                  {/* Password Strength Checklist */}
-                  {formData.password && (
-                    <div className="mt-2.5 rounded-xl border border-slate-800 bg-slate-900/60 p-3 space-y-2 animate-fade-in">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-400 font-medium">Strength:</span>
-                        <span
-                          className={`font-bold font-mono ${
-                            strengthLabel === 'Strong'
-                              ? 'text-emerald-400'
-                              : strengthLabel === 'Medium'
-                              ? 'text-amber-400'
-                              : 'text-rose-400'
-                          }`}
-                        >
-                          {strengthLabel}
-                        </span>
-                      </div>
-
-                      {/* Progress bars */}
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map((lvl) => (
-                          <div
-                            key={lvl}
-                            className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                              lvl <= passedCount
-                                ? strengthLabel === 'Strong'
-                                ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
-                                : strengthLabel === 'Medium'
-                                ? 'bg-amber-500'
-                                : 'bg-rose-500'
-                              : 'bg-slate-800'
-                            }`}
-                          />
-                        ))}
-                      </div>
-
-                      {/* Requirements Grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
-                        <RequirementCheck
-                          passed={passwordRequirements.minLength}
-                          text="At least 8 characters"
-                        />
-                        <RequirementCheck
-                          passed={passwordRequirements.uppercase}
-                          text="One uppercase letter"
-                        />
-                        <RequirementCheck
-                          passed={passwordRequirements.lowercase}
-                          text="One lowercase letter"
-                        />
-                        <RequirementCheck
-                          passed={passwordRequirements.number}
-                          text="One number"
-                        />
-                        <RequirementCheck
-                          passed={passwordRequirements.special}
-                          text="One special character"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Confirm Password */}
-                <div>
-                  <PasswordInput
-                    id="confirm_password"
-                    name="confirm_password"
-                    label="Confirm Password"
-                    required
-                    autoComplete="new-password"
-                    value={formData.confirm_password}
-                    onChange={handleChange}
-                    placeholder="Re-enter your password"
-                  />
-
-                  {formData.confirm_password && (
-                    <div
-                      className={`mt-1.5 text-xs font-medium flex items-center gap-1.5 animate-fade-in ${
-                        passwordsMatch ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      {passwordsMatch ? (
-                        <>
-                          <Check className="h-3.5 w-3.5" />
-                          <span>Passwords match</span>
-                        </>
-                      ) : (
-                        <>
-                          <X className="h-3.5 w-3.5" />
-                          <span>Passwords do not match</span>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Submit Button */}
-                <div className="pt-2">
-                  <Button
-                    type="submit"
-                    id="register-submit-btn"
-                    loading={loading}
-                    icon={ArrowRight}
-                    iconPosition="right"
-                    className="w-full"
-                    size="md"
-                  >
-                    {loading ? 'Creating account...' : 'Create Account'}
-                  </Button>
-                </div>
-              </form>
-
-              {/* Card Footer: Switch to Login */}
-              <div className="pt-4 border-t border-slate-800/80 text-center">
-                <p className="text-xs text-slate-400">
-                  Already have an account?{' '}
-                  <Link
-                    to="/login"
-                    className="font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
-                  >
-                    Sign in &rarr;
-                  </Link>
-                </p>
-              </div>
-
+              {/* Username */}
+              <Input
+                id="username"
+                name="username"
+                label="Username"
+                required
+                placeholder="janedoe"
+                value={formData.username}
+                onChange={handleChange}
+                icon={AtSign}
+              />
             </div>
+
+            {/* Email */}
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              label="Work email address"
+              required
+              autoComplete="email"
+              placeholder="jane@company.com"
+              value={formData.email}
+              onChange={handleChange}
+              icon={Mail}
+            />
+
+            {/* Password */}
+            <PasswordInput
+              id="password"
+              name="password"
+              label="Password"
+              required
+              autoComplete="new-password"
+              placeholder="••••••••"
+              value={formData.password}
+              onChange={handleChange}
+            />
+
+            {/* Live 5-Rule Password Checklist */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#263449] bg-slate-50/70 dark:bg-[#0F172A] space-y-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-[#94A3B8] font-mono block">
+                Password Requirements
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <RequirementCheck
+                  passed={passwordRequirements.minLength}
+                  text="At least 8 characters"
+                />
+                <RequirementCheck
+                  passed={passwordRequirements.uppercase}
+                  text="One uppercase letter (A-Z)"
+                />
+                <RequirementCheck
+                  passed={passwordRequirements.lowercase}
+                  text="One lowercase letter (a-z)"
+                />
+                <RequirementCheck
+                  passed={passwordRequirements.number}
+                  text="One numerical digit (0-9)"
+                />
+                <RequirementCheck
+                  passed={passwordRequirements.special}
+                  text="One special character (!@#...)"
+                />
+              </div>
+            </div>
+
+            {/* Confirm Password */}
+            <PasswordInput
+              id="confirm_password"
+              name="confirm_password"
+              label="Confirm password"
+              required
+              autoComplete="new-password"
+              placeholder="••••••••"
+              value={formData.confirm_password}
+              onChange={handleChange}
+              error={
+                formData.confirm_password && !passwordsMatch
+                  ? 'Passwords do not match.'
+                  : undefined
+              }
+            />
+
+            {/* Submit Button */}
+            <div className="pt-2">
+              <Button
+                type="submit"
+                id="register-submit-btn"
+                loading={loading}
+                icon={ArrowRight}
+                iconPosition="right"
+                className="w-full font-medium"
+                size="md"
+              >
+                {loading ? 'Creating account...' : 'Create account'}
+              </Button>
+            </div>
+          </form>
+
+          {/* Switch to Login */}
+          <div className="pt-4 border-t border-slate-100 dark:border-[#263449] text-center">
+            <p className="text-xs text-slate-500 dark:text-[#94A3B8]">
+              Already have an account?{' '}
+              <Link
+                to={redirectParam ? `/login?redirect=${encodeURIComponent(redirectParam)}` : '/login'}
+                className="font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+              >
+                Sign in &rarr;
+              </Link>
+            </p>
           </div>
 
         </div>
+
+        {/* Bottom Health Status */}
+        <div className="flex items-center justify-center gap-2 text-xs text-slate-400 dark:text-[#94A3B8] font-mono">
+          <Server className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+          <span>API Connection:</span>
+          <span className={healthInfo.isOnline ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-500'}>
+            {healthInfo.isOnline ? 'Online' : 'Checking...'}
+          </span>
+        </div>
+
       </div>
     </div>
   );

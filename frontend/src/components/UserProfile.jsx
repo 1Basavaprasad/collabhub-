@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import Button from './Button';
+import Avatar from './Avatar';
 
 const UserProfile = () => {
   const { user, refreshUser } = useAuth();
@@ -38,29 +39,23 @@ const UserProfile = () => {
   };
 
   return (
-    <div id="profile" className="rounded-3xl border border-slate-800/80 bg-slate-900/50 p-6 sm:p-7 backdrop-blur-xl shadow-xl shadow-black/20 space-y-6">
+    <div id="profile" className="rounded-xl border border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#151F32] p-6 sm:p-7 shadow-xs space-y-6">
       {/* Top Banner with User Avatar & Refresh Action */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-slate-800/80">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-[#263449]">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 text-white font-extrabold text-xl shadow-lg shadow-indigo-600/30 border border-indigo-400/30">
-            {user.full_name
-              ? user.full_name.charAt(0).toUpperCase()
-              : user.username
-              ? user.username.charAt(0).toUpperCase()
-              : 'U'}
-          </div>
+          <Avatar user={user} size="2xl" variant="indigo-solid" />
 
           <div>
             <div className="flex items-center gap-2.5">
-              <h3 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
-                {user.full_name || 'CollabHub User'}
+              <h3 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-[#F8FAFC] tracking-tight">
+                {user.full_name || 'TeamX User'}
               </h3>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-mono">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 font-mono">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Active
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-slate-400 font-mono mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-[#94A3B8] font-mono mt-0.5">
               @{user.username}
             </p>
           </div>
@@ -73,6 +68,7 @@ const UserProfile = () => {
           loading={isRefreshing}
           icon={RefreshCw}
           iconPosition="left"
+          className="text-xs font-medium"
         >
           Refresh
         </Button>
@@ -81,95 +77,87 @@ const UserProfile = () => {
       {/* Profile Details Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {/* Full Name */}
-        <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 transition-all hover:border-slate-700/60">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
-            <User className="h-3.5 w-3.5 text-indigo-400" />
+        <div className="rounded-xl border border-slate-200/80 dark:border-[#263449] bg-slate-50/50 dark:bg-[#0F172A] p-4 transition-all hover:border-slate-300 dark:hover:border-[#33435c]">
+          <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-[#94A3B8] flex items-center gap-1.5 font-mono">
+            <User className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
             Full Name
           </span>
-          <p className="text-sm font-semibold text-slate-200 mt-1">
+          <p className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC] mt-1">
             {user.full_name || '—'}
           </p>
         </div>
 
         {/* Username */}
-        <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 transition-all hover:border-slate-700/60">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
-            <AtSign className="h-3.5 w-3.5 text-indigo-400" />
+        <div className="rounded-xl border border-slate-200/80 dark:border-[#263449] bg-slate-50/50 dark:bg-[#0F172A] p-4 transition-all hover:border-slate-300 dark:hover:border-[#33435c]">
+          <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-[#94A3B8] flex items-center gap-1.5 font-mono">
+            <AtSign className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
             Username
           </span>
-          <p className="text-sm font-semibold text-slate-200 font-mono mt-1">
+          <p className="text-sm font-mono font-semibold text-slate-900 dark:text-[#F8FAFC] mt-1">
             @{user.username}
           </p>
         </div>
 
         {/* Email */}
-        <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 transition-all hover:border-slate-700/60">
+        <div className="rounded-xl border border-slate-200/80 dark:border-[#263449] bg-slate-50/50 dark:bg-[#0F172A] p-4 transition-all hover:border-slate-300 dark:hover:border-[#33435c]">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
-              <Mail className="h-3.5 w-3.5 text-indigo-400" />
+            <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-[#94A3B8] flex items-center gap-1.5 font-mono">
+              <Mail className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
               Email Address
             </span>
             <button
+              type="button"
               onClick={() => copyToClipboard(user.email, 'email')}
-              className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              className="text-slate-400 dark:text-[#94A3B8] hover:text-slate-700 dark:hover:text-white p-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-[#202D43] transition-colors cursor-pointer"
               title="Copy email"
             >
               {copiedField === 'email' ? (
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />
               )}
             </button>
           </div>
-          <p className="text-sm font-semibold text-slate-200 font-mono truncate">
+          <p className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC] font-mono truncate">
             {user.email}
           </p>
         </div>
 
         {/* Account ID */}
-        <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 transition-all hover:border-slate-700/60">
+        <div className="rounded-xl border border-slate-200/80 dark:border-[#263449] bg-slate-50/50 dark:bg-[#0F172A] p-4 transition-all hover:border-slate-300 dark:hover:border-[#33435c]">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
-              <Fingerprint className="h-3.5 w-3.5 text-indigo-400" />
+            <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-[#94A3B8] flex items-center gap-1.5 font-mono">
+              <Fingerprint className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
               Account ID
             </span>
             <button
+              type="button"
               onClick={() => copyToClipboard(user.id, 'id')}
-              className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              className="text-slate-400 dark:text-[#94A3B8] hover:text-slate-700 dark:hover:text-white p-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-[#202D43] transition-colors cursor-pointer"
               title="Copy Account ID"
             >
               {copiedField === 'id' ? (
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />
               )}
             </button>
           </div>
-          <p className="text-xs font-mono font-medium text-slate-300 truncate" title={user.id}>
+          <p className="text-xs font-mono font-medium text-slate-700 dark:text-[#CBD5E1] truncate" title={user.id}>
             {user.id || '—'}
           </p>
         </div>
 
-        {/* Account Status (Full Width) */}
-        <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 transition-all hover:border-slate-700/60 md:col-span-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-xs font-semibold text-slate-200 block">
-                  Authenticated User Account
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Verified session with organization access rights
-                </span>
-              </div>
-            </div>
-            <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
-              Verified
-            </span>
-          </div>
+        {/* Security / Status */}
+        <div className="rounded-xl border border-slate-200/80 dark:border-[#263449] bg-slate-50/50 dark:bg-[#0F172A] p-4 transition-all hover:border-slate-300 dark:hover:border-[#33435c]">
+          <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-[#94A3B8] flex items-center gap-1.5 font-mono">
+            <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            Security Status
+          </span>
+          <p className="text-xs font-mono font-medium text-emerald-700 dark:text-emerald-400 mt-1 flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            JWT Authenticated
+          </p>
         </div>
       </div>
     </div>

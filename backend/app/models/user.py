@@ -12,6 +12,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.company_invitation import CompanyInvitation
     from app.models.company_member import CompanyMember
+    from app.models.team_member import TeamMember
 
 
 class User(Base):
@@ -77,5 +78,12 @@ class User(Base):
     sent_company_invitations: Mapped[list["CompanyInvitation"]] = relationship(
         "CompanyInvitation",
         back_populates="invited_by_user",
+        cascade="all, delete-orphan",
+    )
+
+    # Team memberships
+    team_memberships: Mapped[list["TeamMember"]] = relationship(
+        "TeamMember",
+        back_populates="user",
         cascade="all, delete-orphan",
     )

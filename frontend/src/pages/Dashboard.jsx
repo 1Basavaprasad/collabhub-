@@ -2,43 +2,43 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
+import { useTeam } from '../context/TeamContext';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
-import UserProfile from '../components/UserProfile';
 import StatCard from '../components/StatCard';
-import EmptyState from '../components/EmptyState';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/Card';
 import Button from '../components/Button';
+import Badge from '../components/Badge';
+import Avatar, { getDisplayName } from '../components/Avatar';
 import {
-  ShieldCheck,
-  Activity,
-  User,
-  RefreshCw,
-  Layers,
   Building2,
-  Lock,
-  CheckCircle2,
   ChevronRight,
   ArrowRight,
-  Shield,
-  Zap,
   Users,
+  Users2,
+  Mail,
+  UserPlus,
+  FolderKanban,
+  CheckSquare,
 } from 'lucide-react';
 
 const Dashboard = () => {
-  const { user, healthInfo, checkHealth } = useAuth();
-  const { company, members, hasCompany, loading: companyLoading } = useCompany();
+  const { user } = useAuth();
+  const {
+    company,
+    companies = [],
+    members = [],
+    invitations = [],
+    hasCompany,
+    loading: companyLoading,
+    canInviteMembers,
+    canManageCompany,
+  } = useCompany();
+  const { teams = [] } = useTeam();
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isHealthRefreshing, setIsHealthRefreshing] = useState(false);
   const [logoError, setLogoError] = useState(false);
-
-  const handleHealthRefresh = async () => {
-    setIsHealthRefreshing(true);
-    await checkHealth();
-    setTimeout(() => setIsHealthRefreshing(false), 500);
-  };
 
   // Personalized Greeting
   const getGreeting = () => {
@@ -47,6 +47,12 @@ const Dashboard = () => {
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
   };
+
+  const pendingInvitations = Array.isArray(invitations)
+    ? invitations.filter((inv) => inv && (inv.status || '').toUpperCase() === 'PENDING')
+    : [];
+
+  const pendingInvitationsCount = pendingInvitations.length;
 
   const hierarchySteps = [
     {
@@ -58,20 +64,24 @@ const Dashboard = () => {
       icon: Building2,
       ready: hasCompany && Boolean(company),
       status: hasCompany ? 'Active' : 'Next Step',
+      link: '/company',
     },
     {
       step: '02',
       title: 'Teams',
-      desc: 'Provision engineering, product, and operations teams.',
-      icon: Users,
-      ready: false,
-      status: 'Coming soon',
+      desc: teams.length > 0
+        ? `${teams.length} ${teams.length === 1 ? 'team' : 'teams'} organized in workspace.`
+        : 'Create and organize teams for collaboration.',
+      icon: Users2,
+      ready: true,
+      status: teams.length > 0 ? 'Active' : 'Available',
+      link: '/teams',
     },
     {
       step: '03',
       title: 'Projects',
       desc: 'Collaborative deliverables and project boards.',
-      icon: Layers,
+      icon: FolderKanban,
       ready: false,
       status: 'Coming soon',
     },
@@ -79,14 +89,14 @@ const Dashboard = () => {
       step: '04',
       title: 'Tasks',
       desc: 'Task tracking, assignments, and activity feed.',
-      icon: ShieldCheck,
+      icon: CheckSquare,
       ready: false,
       status: 'Coming soon',
     },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col text-slate-100 selection:bg-indigo-500/30 selection:text-indigo-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white">
       {/* Top SaaS Navbar */}
       <Navbar onToggleSidebar={() => setSidebarOpen((prev) => !prev)} />
 
@@ -99,36 +109,49 @@ const Dashboard = () => {
           <div className="max-w-6xl mx-auto space-y-6">
             
             {/* Breadcrumb Header */}
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
-              <span>CollabHub</span>
-              <ChevronRight className="h-3 w-3" />
-              <span className="text-indigo-400 font-medium">Dashboard</span>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#94A3B8] font-normal">
+              <span>TeamX</span>
+              <ChevronRight className="h-3 w-3 text-slate-400 dark:text-[#64748B]" />
+              <span>Workspace</span>
+              <ChevronRight className="h-3 w-3 text-slate-400 dark:text-[#64748B]" />
+              <span className="text-indigo-600 dark:text-indigo-400 font-medium">Dashboard</span>
             </div>
 
             {/* Welcoming Header Banner */}
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-6 sm:p-7 backdrop-blur-md shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="rounded-xl border border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#151F32] p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 dark:text-[#F8FAFC]">
                   {getGreeting()}, {user?.full_name?.split(' ')[0] || user?.username || 'Teammate'} 👋
                 </h1>
-                <p className="mt-1 text-xs sm:text-sm text-slate-400">
+                <p className="mt-0.5 text-xs sm:text-sm text-slate-500 dark:text-[#94A3B8]">
                   {hasCompany && company
-                    ? `Here's what's happening in your ${company.name} workspace today.`
-                    : "Here's what's happening in your workspace today. Set up your company to get started."}
+                    ? `Here's what's happening in your ${company.name} workspace.`
+                    : "Here's what's happening in your workspace. Set up your company to get started."}
                 </p>
               </div>
 
-              <div className="shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 {hasCompany ? (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={Building2}
-                    onClick={() => navigate('/company')}
-                    className="text-xs"
-                  >
-                    View Company
-                  </Button>
+                  <>
+                    {canInviteMembers && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={UserPlus}
+                        onClick={() => navigate('/company?tab=invitations')}
+                      >
+                        Invite Member
+                      </Button>
+                    )}
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={Building2}
+                      onClick={() => navigate('/company')}
+                    >
+                      View Company
+                    </Button>
+                  </>
                 ) : (
                   <Button
                     variant="primary"
@@ -136,7 +159,6 @@ const Dashboard = () => {
                     icon={ArrowRight}
                     iconPosition="right"
                     onClick={() => navigate('/company')}
-                    className="text-xs"
                   >
                     Set Up Company
                   </Button>
@@ -145,320 +167,310 @@ const Dashboard = () => {
             </div>
 
             {/* Summary Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
-                title="Workspace"
+                title="Companies"
                 value={
                   companyLoading
-                    ? 'Loading...'
+                    ? '...'
+                    : companies.length > 0
+                    ? companies.length.toString()
                     : hasCompany
-                    ? company.name
-                    : 'No Company'
+                    ? '1'
+                    : '0'
                 }
                 subtitle={
-                  hasCompany
-                    ? `${company.industry || 'Active Organization'}`
-                    : 'Click to configure workspace'
+                  hasCompany && company
+                    ? company.name
+                    : 'No workspace yet'
                 }
                 icon={Building2}
               />
 
               <StatCard
-                title="Team Members"
+                title="Members"
                 value={hasCompany ? members.length.toString() : '0'}
                 subtitle={
                   hasCompany
-                    ? `${members.length} ${members.length === 1 ? 'member' : 'members'} active`
-                    : 'No members yet'
+                    ? `${members.length} active in workspace`
+                    : 'Configure workspace'
                 }
                 icon={Users}
               />
 
               <StatCard
-                title="API Connection"
-                value={healthInfo.isOnline ? 'Online' : 'Checking'}
-                subtitle="CollabHub API (8001)"
-                icon={Activity}
-                actionButton={
-                  <button
-                    onClick={handleHealthRefresh}
-                    title="Refresh connection status"
-                    className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                  >
-                    <RefreshCw
-                      className={`h-3 w-3 ${
-                        isHealthRefreshing ? 'animate-spin text-indigo-400' : ''
-                      }`}
-                    />
-                  </button>
+                title="Pending Invites"
+                value={
+                  hasCompany && canManageCompany
+                    ? pendingInvitationsCount.toString()
+                    : '0'
                 }
+                subtitle={
+                  hasCompany && canManageCompany
+                    ? `${pendingInvitationsCount} awaiting response`
+                    : 'Workspace invitations'
+                }
+                icon={Mail}
               />
 
               <StatCard
-                title="Account Status"
-                value="Active"
-                subtitle={`@${user?.username || 'user'}`}
-                icon={User}
+                title="Teams"
+                value={teams.length.toString()}
+                subtitle={
+                  teams.length > 0
+                    ? `${teams.length} collaboration groups`
+                    : 'No teams created'
+                }
+                icon={Users2}
               />
             </div>
 
             {/* Main Content Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
-              {/* Left Column: Organization & Modules (8 Cols) */}
+              {/* Left Column: Organization & Modules & Recent Activity (8 Cols) */}
               <div className="lg:col-span-8 space-y-6">
                 
-                {/* Workspace Hierarchy Card */}
-                <Card>
-                  <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <CardTitle icon={Building2}>
-                        {hasCompany ? 'Organization Workspace' : 'Company Setup'}
-                      </CardTitle>
-                      <CardDescription>
-                        {hasCompany
-                          ? `Teams, projects, and collaborative tasks are organized under ${company.name}.`
-                          : 'Set up your organization to unlock team workspaces and collaboration boards.'}
-                      </CardDescription>
-                    </div>
-
-                    <Button
-                      variant={hasCompany ? 'secondary' : 'primary'}
-                      size="xs"
-                      onClick={() => navigate('/company')}
-                    >
-                      {hasCompany ? 'Manage Workspace' : 'Set Up Company'}
-                    </Button>
-                  </CardHeader>
-
-                  <CardContent className="space-y-4">
-                    {/* Active Company Highlight */}
-                    {hasCompany && company && (
-                      <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          {/* Logo or Avatar */}
-                          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-slate-900 border border-slate-700/80 shadow-sm flex items-center justify-center">
-                            {company.logo_url && !logoError ? (
-                              <img
-                                src={company.logo_url}
-                                alt={company.name}
-                                onError={() => setLogoError(true)}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center bg-indigo-600 text-white font-bold text-base">
-                                {company.name ? company.name.charAt(0).toUpperCase() : 'C'}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="text-sm font-bold text-white truncate">
-                                {company.name}
-                              </h4>
-                              {company.industry && (
-                                <span className="text-xs text-slate-400 font-mono">
-                                  &bull; {company.industry}
-                                </span>
-                              )}
-                              <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                                Active
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-400 mt-0.5 max-w-md truncate">
-                              {company.description || 'No description provided.'}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-800">
-                                <div
-                                  className="h-full rounded-full bg-indigo-500"
-                                  style={{ width: `${company.profile_completeness ?? 0}%` }}
-                                />
-                              </div>
-                              <span className="text-[10px] font-mono text-slate-400">
-                                {company.profile_completeness ?? 0}% profile complete
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
+                {/* When User has NO Company */}
+                {!hasCompany && !companyLoading ? (
+                  <Card className="border-indigo-100 dark:border-indigo-900/40 bg-white dark:bg-[#151F32] shadow-xs">
+                    <CardContent className="p-6 text-center space-y-3.5">
+                      <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 shadow-2xs mx-auto">
+                        <Building2 className="h-5 w-5" />
+                      </div>
+                      <div className="space-y-1 max-w-md mx-auto">
+                        <h2 className="text-base sm:text-lg font-semibold tracking-tight text-slate-900 dark:text-[#F8FAFC]">
+                          Create your first workspace
+                        </h2>
+                        <p className="text-xs text-slate-500 dark:text-[#94A3B8] leading-relaxed">
+                          Set up your company workspace to invite teammates, manage members, and collaborate across teams.
+                        </p>
+                      </div>
+                      <div className="pt-1">
                         <Button
-                          variant="ghost"
-                          size="xs"
-                          icon={ChevronRight}
+                          variant="primary"
+                          size="sm"
+                          icon={ArrowRight}
                           iconPosition="right"
                           onClick={() => navigate('/company')}
-                          className="text-indigo-400 hover:text-indigo-300 shrink-0 text-xs"
                         >
-                          Manage
+                          Create Workspace
                         </Button>
                       </div>
-                    )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  /* Organization Workspace Overview Card */
+                  <Card>
+                    <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <CardTitle icon={Building2}>Organization Workspace</CardTitle>
+                        <CardDescription>
+                          Teams, members, and collaborative tasks organized under {company?.name}.
+                        </CardDescription>
+                      </div>
 
-                    {/* Hierarchy Progression Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {hierarchySteps.map((item) => {
-                        const Icon = item.icon;
-
-                        return (
-                          <div
-                            key={item.step}
-                            className={`p-3.5 rounded-xl border space-y-2 ${
-                              item.ready
-                                ? 'border-emerald-500/25 bg-emerald-500/5'
-                                : 'border-slate-800/80 bg-slate-950/40'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className={`text-xs font-mono font-semibold ${
-                                item.ready ? 'text-emerald-400' : 'text-slate-500'
-                              }`}>
-                                {item.step}
-                              </span>
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                                item.ready
-                                  ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1'
-                                  : 'bg-slate-900 text-slate-400 border border-slate-800 flex items-center gap-1'
-                              }`}>
-                                {item.ready ? (
-                                  <>
-                                    <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-                                    Active
-                                  </>
-                                ) : (
-                                  <>
-                                    <Lock className="h-2.5 w-2.5 text-slate-500" />
-                                    Coming soon
-                                  </>
-                                )}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <Icon className={`h-4 w-4 shrink-0 ${
-                                item.ready ? 'text-emerald-400' : 'text-slate-500'
-                              }`} />
-                              <h4 className="text-xs font-semibold text-slate-200">
-                                {item.title}
-                              </h4>
-                            </div>
-
-                            <p className="text-[11px] text-slate-400 leading-relaxed">
-                              {item.desc}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {!hasCompany && !companyLoading && (
-                      <EmptyState
-                        icon={Building2}
-                        title="No company workspace configured"
-                        description="Create your company organization to begin provisioning teams and inviting members."
-                        actionLabel="Set Up Company"
-                        onAction={() => navigate('/company')}
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* User Profile Component */}
-                <UserProfile />
-
-              </div>
-
-              {/* Right Column: Platform Overview & Security (4 Cols) */}
-              <div className="lg:col-span-4 space-y-6">
-                
-                {/* Platform Overview */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle icon={Activity}>
-                      System Status
-                    </CardTitle>
-                    <CardDescription>
-                      CollabHub platform and connection health
-                    </CardDescription>
-                  </CardHeader>
-
-                  <CardContent className="space-y-2.5 text-xs">
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/40 border border-slate-800">
-                      <span className="text-slate-400">Platform</span>
-                      <span className="text-slate-200 font-medium">CollabHub SaaS</span>
-                    </div>
-
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/40 border border-slate-800">
-                      <span className="text-slate-400">API Status</span>
-                      <span className="text-emerald-400 font-medium flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                        Connected
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/40 border border-slate-800">
-                      <span className="text-slate-400">Environment</span>
-                      <span className="text-indigo-300 font-mono">Production</span>
-                    </div>
-
-                    <div className="pt-1">
                       <Button
                         variant="secondary"
                         size="xs"
-                        onClick={handleHealthRefresh}
-                        loading={isHealthRefreshing}
-                        icon={Zap}
-                        className="w-full text-xs"
+                        onClick={() => navigate('/company')}
                       >
-                        Verify Connection
+                        Manage Workspace
                       </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardHeader>
 
-                {/* Session Security Timeline */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle icon={ShieldCheck}>
-                      Session Activity
-                    </CardTitle>
-                    <CardDescription>
-                      Current authenticated session details
-                    </CardDescription>
-                  </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Active Company Highlight */}
+                      {hasCompany && company && (
+                        <div className="p-4 rounded-xl border border-slate-200/80 dark:border-[#263449] bg-slate-50/50 dark:bg-[#1B263A]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white dark:bg-[#151F32] border border-slate-200 dark:border-[#263449] shadow-2xs flex items-center justify-center">
+                              {company.logo_url && !logoError ? (
+                                <img
+                                  src={company.logo_url}
+                                  alt={company.name}
+                                  onError={() => setLogoError(true)}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-indigo-600 text-white font-semibold text-base">
+                                  {company.name ? company.name.charAt(0).toUpperCase() : 'C'}
+                                </div>
+                              )}
+                            </div>
 
-                  <CardContent className="space-y-3 text-xs">
-                    <div className="flex items-start gap-2.5">
-                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-0.5">
-                        <CheckCircle2 className="h-3 w-3" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-200">
-                          Account Authenticated
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          Signed in as @{user?.username}
-                        </p>
-                      </div>
-                    </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
+                                  {company.name}
+                                </h3>
+                                <Badge variant="indigo" size="xs">
+                                  {company.industry || 'Workspace'}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-slate-500 dark:text-[#94A3B8] truncate mt-0.5">
+                                {company.description || 'Enterprise collaboration workspace'}
+                              </p>
+                            </div>
+                          </div>
 
-                    <div className="flex items-start gap-2.5">
-                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mt-0.5">
-                        <Building2 className="h-3 w-3" />
+                          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                            <Button
+                              variant="secondary"
+                              size="xs"
+                              onClick={() => navigate('/company?tab=members')}
+                            >
+                              {members.length} {members.length === 1 ? 'Member' : 'Members'}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Workspace Architecture Flow */}
+                      <div className="space-y-2 pt-2">
+                        <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] block">
+                          Workspace Capabilities
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {hierarchySteps.map((step) => {
+                            const Icon = step.icon;
+                            return (
+                              <div
+                                key={step.title}
+                                onClick={() => step.link && navigate(step.link)}
+                                className={`p-3 rounded-xl border border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#151F32] transition-all ${
+                                  step.link ? 'hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-2xs cursor-pointer' : 'opacity-70'
+                                } flex items-start gap-3`}
+                              >
+                                <div
+                                  className={`p-2 rounded-lg ${
+                                    step.ready
+                                      ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                      : 'bg-slate-100 dark:bg-[#1B263A] text-slate-400 dark:text-[#64748B]'
+                                  }`}
+                                >
+                                  <Icon className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
+                                      {step.title}
+                                    </span>
+                                    <span
+                                      className={`text-[9px] font-mono font-medium px-1.5 py-0.2 rounded ${
+                                        step.status === 'Active'
+                                          ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-500/20'
+                                          : 'bg-slate-100 dark:bg-[#1B263A] text-slate-500 dark:text-[#94A3B8] border border-slate-200/60 dark:border-[#263449]'
+                                      }`}
+                                    >
+                                      {step.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] mt-0.5 leading-tight line-clamp-2">
+                                    {step.desc}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-slate-200">
-                          {hasCompany ? 'Organization Workspace' : 'Company Setup Pending'}
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          {hasCompany ? `${company?.name} active` : 'Ready to configure'}
-                        </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+              </div>
+
+              {/* Right Column: Quick Info & Pending Invites (4 Cols) */}
+              <div className="lg:col-span-4 space-y-6">
+                
+                {/* Pending Invitations Quick Card */}
+                {hasCompany && canManageCompany && (
+                  <Card>
+                    <CardHeader className="flex items-center justify-between">
+                      <CardTitle icon={Mail}>Invitations</CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => navigate('/company?tab=invitations')}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                      >
+                        View all
+                      </Button>
+                    </CardHeader>
+
+                    <CardContent className="space-y-3">
+                      {pendingInvitations.length === 0 ? (
+                        <div className="text-center py-5 space-y-1.5">
+                          <Mail className="h-6 w-6 text-slate-300 dark:text-[#64748B] mx-auto" />
+                          <p className="text-xs font-semibold text-slate-700 dark:text-[#CBD5E1]">No pending invitations</p>
+                          <p className="text-[11px] text-slate-400 dark:text-[#94A3B8]">All sent invitations have been processed.</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100 dark:divide-[#263449]">
+                          {pendingInvitations.slice(0, 3).map((inv) => (
+                            <div key={inv.id} className="py-2.5 flex items-center justify-between gap-2 text-xs">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-900 dark:text-[#F8FAFC] truncate font-mono text-[11px]">
+                                  {inv.email}
+                                </p>
+                                <span className="text-[10px] text-slate-400 dark:text-[#94A3B8] font-mono">
+                                  Role: {inv.role}
+                                </span>
+                              </div>
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-500/20 shrink-0">
+                                PENDING
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Workspace Members Quick List */}
+                {hasCompany && (
+                  <Card>
+                    <CardHeader className="flex items-center justify-between">
+                      <CardTitle icon={Users}>Workspace Members</CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => navigate('/company?tab=members')}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                      >
+                        View all
+                      </Button>
+                    </CardHeader>
+
+                    <CardContent className="space-y-3">
+                      <div className="divide-y divide-slate-100 dark:divide-[#263449]">
+                        {members.slice(0, 4).map((m) => {
+                          const memberUser = m.user || m;
+                          return (
+                            <div key={m.user_id || m.id} className="py-2.5 flex items-center justify-between gap-2 text-xs">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <Avatar user={memberUser} size="xs" />
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
+                                    {getDisplayName(memberUser)}
+                                  </p>
+                                  <span className="text-[10px] text-slate-400 dark:text-[#94A3B8] font-mono truncate block">
+                                    {memberUser.email}
+                                  </span>
+                                </div>
+                              </div>
+                              <Badge variant={m.role === 'OWNER' ? 'indigo' : 'neutral'} size="xs">
+                                {m.role}
+                              </Badge>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                )}
 
               </div>
 

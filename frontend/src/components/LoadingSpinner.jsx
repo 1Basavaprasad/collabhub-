@@ -11,8 +11,8 @@ const sizeMap = {
 const LoadingSpinner = ({ size = 'md', className = '', label }) => {
   return (
     <div className="inline-flex items-center gap-2">
-      <Loader2 className={`animate-spin text-indigo-400 ${sizeMap[size] || sizeMap.md} ${className}`} />
-      {label && <span className="text-xs text-slate-400 font-medium">{label}</span>}
+      <Loader2 className={`animate-spin text-indigo-600 ${sizeMap[size] || sizeMap.md} ${className}`} />
+      {label && <span className="text-xs text-slate-600 font-medium">{label}</span>}
     </div>
   );
 };

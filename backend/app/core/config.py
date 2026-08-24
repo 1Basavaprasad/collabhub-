@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "CollabHub"
+    PROJECT_NAME: str = "TeamX"
     ENVIRONMENT: str = "development"
     API_V1_STR: str = "/api/v1"
 
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     SMTP_USERNAME: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM_EMAIL: Optional[str] = None
-    SMTP_FROM_NAME: str = "CollabHub"
+    SMTP_FROM_NAME: str = "TeamX"
 
     # Frontend URL for Invitation & Reset Links
     FRONTEND_URL: str = "http://localhost:5173"

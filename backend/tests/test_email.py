@@ -34,7 +34,7 @@ def test_send_company_invitation_email_success():
         mock_settings.SMTP_USERNAME = "test@gmail.com"
         mock_settings.SMTP_PASSWORD = "test-app-password"
         mock_settings.SMTP_FROM_EMAIL = "test@gmail.com"
-        mock_settings.SMTP_FROM_NAME = "CollabHub"
+        mock_settings.SMTP_FROM_NAME = "TeamX"
 
         mock_server = MagicMock()
         mock_smtp_cls.return_value = mock_server
@@ -59,8 +59,8 @@ def test_send_company_invitation_email_success():
         # Inspect sent MIME message
         sent_msg = mock_server.send_message.call_args[0][0]
         assert sent_msg["To"] == recipient
-        assert sent_msg["Subject"] == f"You're invited to join {company_name} on CollabHub"
-        assert "CollabHub <test@gmail.com>" in sent_msg["From"]
+        assert sent_msg["Subject"] == f"You're invited to join {company_name} on TeamX"
+        assert "TeamX <test@gmail.com>" in sent_msg["From"]
 
         # Check message body parts
         body_parts = [part.get_payload(decode=True).decode("utf-8") for part in sent_msg.get_payload()]
@@ -105,7 +105,7 @@ def test_send_company_invitation_smtp_failure():
         mock_settings.SMTP_USERNAME = "test@gmail.com"
         mock_settings.SMTP_PASSWORD = "test-app-password"
         mock_settings.SMTP_FROM_EMAIL = "test@gmail.com"
-        mock_settings.SMTP_FROM_NAME = "CollabHub"
+        mock_settings.SMTP_FROM_NAME = "TeamX"
 
         mock_server = MagicMock()
         mock_server.send_message.side_effect = smtplib.SMTPException("Authentication failed")

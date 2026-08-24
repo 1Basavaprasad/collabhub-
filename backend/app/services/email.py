@@ -30,8 +30,8 @@ def send_company_invitation_email(
     smtp_port = settings.SMTP_PORT
     smtp_username = settings.SMTP_USERNAME
     smtp_password = settings.SMTP_PASSWORD
-    from_email = settings.SMTP_FROM_EMAIL or smtp_username or "noreply@collabhub.app"
-    from_name = settings.SMTP_FROM_NAME or "CollabHub"
+    from_email = settings.SMTP_FROM_EMAIL or smtp_username or "noreply@teamx.app"
+    from_name = settings.SMTP_FROM_NAME or "TeamX"
 
     if not smtp_username or not smtp_password:
         raise RuntimeError(
@@ -48,14 +48,14 @@ def send_company_invitation_email(
     display_department = department.strip() if department and department.strip() else "Not specified"
     display_inviter = inviter_name.strip() if inviter_name and inviter_name.strip() else "A team member"
 
-    subject = f"You're invited to join {company_name} on CollabHub"
+    subject = f"You're invited to join {company_name} on TeamX"
 
     # 1. Plain-text version
-    text_content = f"""CollabHub Workspace Invitation
+    text_content = f"""TeamX Workspace Invitation
 
 You're invited to join {company_name}
 
-{display_inviter} has invited you to collaborate with their organization on CollabHub.
+{display_inviter} has invited you to collaborate with their organization on TeamX.
 
 Your Invitation Details:
 • Company: {company_name}
@@ -70,7 +70,7 @@ Accept your invitation here:
 If you were not expecting this invitation, you can safely ignore this email.
 
 —
-The CollabHub Team
+The TeamX Team
 """
 
     # 2. HTML version (Client-friendly email template)
@@ -90,10 +90,10 @@ The CollabHub Team
                     <tr>
                         <td style="padding: 32px 32px 24px 32px; text-align: center; border-bottom: 1px solid #1e293b;">
                             <div style="display: inline-block; background-color: #4f46e5; color: #ffffff; width: 40px; height: 40px; line-height: 40px; border-radius: 10px; font-weight: bold; font-size: 18px; margin-bottom: 12px;">
-                                C
+                                T
                             </div>
                             <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">
-                                Collab<span style="color: #818cf8;">Hub</span>
+                                Team<span style="color: #818cf8;">X</span>
                             </h1>
                         </td>
                     </tr>
@@ -105,7 +105,7 @@ The CollabHub Team
                                 You're invited to join <span style="color: #818cf8;">{company_name}</span>
                             </h2>
                             <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #94a3b8;">
-                                <strong style="color: #e2e8f0;">{display_inviter}</strong> has invited you to collaborate with their organization on CollabHub.
+                                <strong style="color: #e2e8f0;">{display_inviter}</strong> has invited you to collaborate with their organization on TeamX.
                             </p>
 
                             <!-- Details Card -->
@@ -160,7 +160,7 @@ The CollabHub Team
                     <tr>
                         <td style="padding: 20px 32px; background-color: #0b0f19; border-top: 1px solid #1e293b; text-align: center;">
                             <p style="margin: 0; font-size: 11px; color: #475569;">
-                                &copy; CollabHub SaaS Platform &bull; Secure Multi-Tenant Collaboration
+                                &copy; TeamX SaaS Platform &bull; Secure Multi-Tenant Collaboration
                             </p>
                         </td>
                     </tr>
@@ -216,12 +216,12 @@ def send_password_reset_email(
             params: resend.Emails.SendParams = {
                 "from": settings.EMAIL_FROM or "onboarding@resend.dev",
                 "to": [email],
-                "subject": "Reset your CollabHub password",
+                "subject": "Reset your TeamX password",
                 "html": f"""
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 12px;">
-                    <h2 style="color: #111827;">Reset your CollabHub password</h2>
+                    <h2 style="color: #111827;">Reset your TeamX password</h2>
                     <p>Hello,</p>
-                    <p>We received a request to reset your CollabHub password.</p>
+                    <p>We received a request to reset your TeamX password.</p>
                     <p>Click the button below to create a new password:</p>
                     <div style="margin: 30px 0;">
                         <a href="{reset_link}" style="display: inline-block; padding: 12px 24px; background: #4f46e5; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
@@ -230,7 +230,7 @@ def send_password_reset_email(
                     </div>
                     <p>This link expires in <strong>15 minutes</strong>.</p>
                     <p>If you did not request this, you can safely ignore this email.</p>
-                    <p>Regards,<br><strong>CollabHub Team</strong></p>
+                    <p>Regards,<br><strong>TeamX Team</strong></p>
                 </div>
                 """,
             }
@@ -244,25 +244,25 @@ def send_password_reset_email(
         smtp_host = settings.SMTP_HOST
         smtp_port = settings.SMTP_PORT
         from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME
-        from_name = settings.SMTP_FROM_NAME or "CollabHub"
+        from_name = settings.SMTP_FROM_NAME or "TeamX"
 
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Reset your CollabHub password"
+        msg["Subject"] = "Reset your TeamX password"
         msg["From"] = f"{from_name} <{from_email}>"
         msg["To"] = email
 
         html_body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 12px;">
-            <h2 style="color: #111827;">Reset your CollabHub password</h2>
+            <h2 style="color: #111827;">Reset your TeamX password</h2>
             <p>Hello,</p>
-            <p>We received a request to reset your CollabHub password.</p>
+            <p>We received a request to reset your TeamX password.</p>
             <div style="margin: 30px 0;">
                 <a href="{reset_link}" style="display: inline-block; padding: 12px 24px; background: #4f46e5; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
                     Reset Password
                 </a>
             </div>
             <p>This link expires in 15 minutes.</p>
-            <p>Regards,<br><strong>CollabHub Team</strong></p>
+            <p>Regards,<br><strong>TeamX Team</strong></p>
         </div>
         """
         msg.attach(MIMEText(html_body, "html", "utf-8"))

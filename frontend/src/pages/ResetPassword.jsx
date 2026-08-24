@@ -4,21 +4,21 @@ import { useAuth } from '../context/AuthContext';
 import PasswordInput from '../components/PasswordInput';
 import Button from '../components/Button';
 import Alert from '../components/Alert';
-import { Layers, ArrowRight, CheckCircle2, Check, X, Server } from 'lucide-react';
+import { Layers, ArrowRight, CheckCircle2, Server } from 'lucide-react';
 
 const RESET_TOKEN_STORAGE_KEY = 'collabhub_reset_token';
 
 const RequirementCheck = ({ passed, text }) => (
   <div
     className={`flex items-center gap-1.5 text-xs transition-colors ${
-      passed ? 'text-emerald-400 font-medium' : 'text-slate-500'
+      passed ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-slate-400 dark:text-[#64748B]'
     }`}
   >
     <span
-      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
         passed
-          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-          : 'bg-slate-800 text-slate-500 border border-slate-700'
+          ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30'
+          : 'bg-slate-100 dark:bg-[#1B263A] text-slate-400 dark:text-[#64748B] border border-slate-200 dark:border-[#263449]'
       }`}
     >
       {passed ? '✓' : '•'}
@@ -68,9 +68,6 @@ const ResetPassword = () => {
 
   const passedCount = Object.values(passwordRequirements).filter(Boolean).length;
   const isPasswordStrong = passedCount === 5;
-
-  const strengthLabel =
-    passedCount <= 2 ? 'Weak' : passedCount <= 4 ? 'Medium' : 'Strong';
 
   const passwordsMatch =
     formData.confirm_password.length > 0 &&
@@ -137,7 +134,7 @@ const ResetPassword = () => {
         }
       } else if (err.request) {
         setError(
-          'Cannot connect to the CollabHub backend. Please verify port 8001 is active.'
+          'Cannot connect to the TeamX backend. Please verify port 8001 is active.'
         );
       } else {
         setError('An unexpected error occurred. Please try again.');
@@ -148,78 +145,68 @@ const ResetPassword = () => {
   };
 
   const handleContinueToLogin = () => {
-    navigate('/login', {
-      state: { passwordReset: true },
-    });
+    navigate('/login', { state: { passwordReset: true } });
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-mesh selection:bg-indigo-500/30 selection:text-indigo-200">
-      <div className="w-full max-w-[420px] space-y-6">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-mesh selection:bg-indigo-500 selection:text-white">
+      <div className="w-full max-w-md space-y-6">
         
         {/* Brand Header */}
-        <div className="text-center space-y-1.5">
-          <Link to="/" className="inline-flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-sm">
-              <Layers className="h-4 w-4" />
+        <div className="text-center space-y-2">
+          <Link to="/" className="inline-flex items-center gap-2.5 group">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold text-base shadow-xs group-hover:scale-105 transition-transform">
+              <Layers className="h-5 w-5" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white">
-              Collab<span className="text-indigo-400">Hub</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#F8FAFC]">
+              Team<span className="text-indigo-600 dark:text-indigo-400">X</span>
             </span>
           </Link>
 
-          <div className="pt-2">
-            <h1 className="text-xl font-bold tracking-tight text-white">
-              {success ? 'Password reset complete' : 'Choose a new password'}
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-[#F8FAFC]">
+              Set your new password
             </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {success
-                ? 'Your password has been updated securely.'
-                : 'Create a new secure password for your CollabHub account.'}
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-[#94A3B8] mt-0.5">
+              Choose a secure password for your TeamX account
             </p>
           </div>
         </div>
 
         {/* Card Panel */}
-        <div className="rounded-2xl p-6 sm:p-7 shadow-xl bg-slate-900/80 border border-slate-800 space-y-4">
+        <div className="rounded-xl p-6 sm:p-8 shadow-xs bg-white dark:bg-[#151F32] border border-slate-200/80 dark:border-[#263449] space-y-4 animate-scale-in">
           
-          {/* SUCCESS STATE */}
           {success ? (
-            <div className="space-y-4 animate-fade-in">
-              <div className="flex items-start gap-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 p-3.5 text-emerald-300 text-xs">
-                <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400 mt-0.5" />
-                <div className="leading-relaxed">
-                  <h4 className="font-semibold text-emerald-200 text-xs">
-                    Password reset successfully
-                  </h4>
-                  <p className="mt-0.5 text-slate-300">
-                    You can now sign in to your workspace using your new password.
-                  </p>
-                </div>
+            /* SUCCESS VIEW */
+            <div className="space-y-4 text-center animate-fade-in py-2">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 mx-auto">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                  Password reset successfully!
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-[#94A3B8]">
+                  Your credentials have been updated. You can now sign in with your new password.
+                </p>
               </div>
 
-              <div className="pt-1">
+              <div className="pt-2">
                 <Button
                   variant="primary"
                   size="md"
                   onClick={handleContinueToLogin}
                   icon={ArrowRight}
                   iconPosition="right"
-                  className="w-full text-xs font-semibold"
+                  className="w-full text-xs font-medium"
                 >
-                  Continue to sign in
+                  Sign in to workspace
                 </Button>
               </div>
             </div>
           ) : (
-            /* FORM STATE */
+            /* FORM VIEW */
             <>
-              {!resetToken && (
-                <Alert variant="warning" title="Missing reset token">
-                  No active reset token was detected in your session. Please open the link sent to your email.
-                </Alert>
-              )}
-
               {error && (
                 <Alert
                   variant="error"
@@ -230,127 +217,72 @@ const ResetPassword = () => {
                 </Alert>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-3.5">
-                {/* New Password */}
-                <div>
-                  <PasswordInput
-                    id="new_password"
-                    name="new_password"
-                    label="New password"
-                    required
-                    autoComplete="new-password"
-                    value={formData.new_password}
-                    onChange={handleChange}
-                    placeholder="Create a strong password"
-                    autoFocus
-                  />
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <PasswordInput
+                  id="new_password"
+                  name="new_password"
+                  label="New password"
+                  required
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  value={formData.new_password}
+                  onChange={handleChange}
+                  autoFocus
+                />
 
-                  {/* Password Strength Checklist */}
-                  {formData.new_password && (
-                    <div className="mt-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2 animate-fade-in">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-400 font-medium">Strength:</span>
-                        <span
-                          className={`font-semibold font-mono ${
-                            strengthLabel === 'Strong'
-                              ? 'text-emerald-400'
-                              : strengthLabel === 'Medium'
-                              ? 'text-amber-400'
-                              : 'text-rose-400'
-                          }`}
-                        >
-                          {strengthLabel}
-                        </span>
-                      </div>
-
-                      {/* Progress bars */}
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map((lvl) => (
-                          <div
-                            key={lvl}
-                            className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                              lvl <= passedCount
-                                ? strengthLabel === 'Strong'
-                                ? 'bg-emerald-500'
-                                : strengthLabel === 'Medium'
-                                ? 'bg-amber-500'
-                                : 'bg-rose-500'
-                              : 'bg-slate-800'
-                            }`}
-                          />
-                        ))}
-                      </div>
-
-                      {/* Requirements Grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 pt-1">
-                        <RequirementCheck
-                          passed={passwordRequirements.minLength}
-                          text="8+ characters"
-                        />
-                        <RequirementCheck
-                          passed={passwordRequirements.uppercase}
-                          text="One uppercase letter"
-                        />
-                        <RequirementCheck
-                          passed={passwordRequirements.lowercase}
-                          text="One lowercase letter"
-                        />
-                        <RequirementCheck
-                          passed={passwordRequirements.number}
-                          text="One number"
-                        />
-                        <RequirementCheck
-                          passed={passwordRequirements.special}
-                          text="One special character"
-                        />
-                      </div>
-                    </div>
-                  )}
+                {/* Password Requirements */}
+                <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#263449] bg-slate-50/70 dark:bg-[#0F172A] space-y-2">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-[#94A3B8] font-mono block">
+                    Security Requirements
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <RequirementCheck
+                      passed={passwordRequirements.minLength}
+                      text="8+ characters"
+                    />
+                    <RequirementCheck
+                      passed={passwordRequirements.uppercase}
+                      text="Uppercase (A-Z)"
+                    />
+                    <RequirementCheck
+                      passed={passwordRequirements.lowercase}
+                      text="Lowercase (a-z)"
+                    />
+                    <RequirementCheck
+                      passed={passwordRequirements.number}
+                      text="Number (0-9)"
+                    />
+                    <RequirementCheck
+                      passed={passwordRequirements.special}
+                      text="Special character"
+                    />
+                  </div>
                 </div>
 
-                {/* Confirm Password */}
-                <div>
-                  <PasswordInput
-                    id="confirm_password"
-                    name="confirm_password"
-                    label="Confirm password"
-                    required
-                    autoComplete="new-password"
-                    value={formData.confirm_password}
-                    onChange={handleChange}
-                    placeholder="Re-enter your password"
-                  />
+                <PasswordInput
+                  id="confirm_password"
+                  name="confirm_password"
+                  label="Confirm new password"
+                  required
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  value={formData.confirm_password}
+                  onChange={handleChange}
+                  error={
+                    formData.confirm_password && !passwordsMatch
+                      ? 'Passwords do not match.'
+                      : undefined
+                  }
+                />
 
-                  {formData.confirm_password && (
-                    <div
-                      className={`mt-1 text-xs font-medium flex items-center gap-1.5 animate-fade-in ${
-                        passwordsMatch ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      {passwordsMatch ? (
-                        <>
-                          <Check className="h-3.5 w-3.5" />
-                          <span>Passwords match</span>
-                        </>
-                      ) : (
-                        <>
-                          <X className="h-3.5 w-3.5" />
-                          <span>Passwords do not match</span>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Submit Button */}
-                <div className="pt-1">
+                <div className="pt-2">
                   <Button
                     type="submit"
                     id="reset-password-submit-btn"
                     loading={loading}
                     icon={ArrowRight}
                     iconPosition="right"
-                    className="w-full text-xs font-semibold"
+                    className="w-full font-medium"
                     size="md"
                   >
                     {loading ? 'Updating password...' : 'Update password'}
@@ -358,10 +290,10 @@ const ResetPassword = () => {
                 </div>
               </form>
 
-              <div className="pt-3 border-t border-slate-800 text-center">
+              <div className="pt-4 border-t border-slate-100 dark:border-[#263449] text-center">
                 <Link
                   to="/login"
-                  className="text-xs font-medium text-slate-400 hover:text-white transition-colors"
+                  className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
                 >
                   &larr; Back to sign in
                 </Link>
@@ -371,12 +303,12 @@ const ResetPassword = () => {
 
         </div>
 
-        {/* Bottom Health Badge */}
-        <div className="flex items-center justify-center gap-2 text-xs text-slate-500 font-mono">
-          <Server className="h-3 w-3 text-indigo-400" />
-          <span>API Status:</span>
-          <span className={healthInfo.isOnline ? 'text-emerald-400' : 'text-slate-400'}>
-            {healthInfo.isOnline ? 'Connected' : 'Checking...'}
+        {/* Bottom Status */}
+        <div className="flex items-center justify-center gap-2 text-xs text-slate-400 dark:text-[#94A3B8] font-mono">
+          <Server className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+          <span>API Connection:</span>
+          <span className={healthInfo.isOnline ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-500'}>
+            {healthInfo.isOnline ? 'Online' : 'Checking...'}
           </span>
         </div>
 

@@ -7,24 +7,28 @@ const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
 
+  // Authentication Initialization Loading State
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 bg-mesh">
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 bg-mesh selection:bg-indigo-500 selection:text-white">
         <div className="flex flex-col items-center gap-4 animate-fade-in">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-xl shadow-indigo-600/30">
-            <Layers className="h-6 w-6 text-white" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-xs">
+            <Layers className="h-6 w-6" />
           </div>
-          <div className="flex items-center gap-2.5 text-xs text-slate-400 font-mono">
+          <div className="flex items-center gap-2.5 text-xs text-slate-500 font-mono">
             <LoadingSpinner size="sm" />
-            <span>Verifying session credentials...</span>
+            <span>Checking your session...</span>
           </div>
         </div>
       </div>
     );
   }
 
+  // If unauthenticated, safely redirect to /login with full return destination
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    const fullPath = location.pathname + location.search;
+    const redirectUrl = `/login?redirect=${encodeURIComponent(fullPath)}`;
+    return <Navigate to={redirectUrl} state={{ from: location }} replace />;
   }
 
   return children ? children : <Outlet />;
