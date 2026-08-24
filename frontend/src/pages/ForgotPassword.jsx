@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import Alert from '../components/Alert';
-import { Layers, Mail, ArrowRight, ArrowLeft, KeyRound, MailCheck, Server } from 'lucide-react';
+import { Layers, Mail, ArrowRight, ArrowLeft, MailCheck, Server } from 'lucide-react';
 
 const ForgotPassword = () => {
   const { forgotPassword, healthInfo } = useAuth();
@@ -58,68 +58,60 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-mesh relative selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* Background ambient lighting */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[460px] h-[460px] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-25 pointer-events-none" />
-
-      <div className="relative z-10 w-full max-w-[440px] space-y-6">
+    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-mesh selection:bg-indigo-500/30 selection:text-indigo-200">
+      <div className="w-full max-w-[400px] space-y-6">
         
         {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <Link to="/" className="inline-flex items-center gap-2.5 group">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-600/25 border border-indigo-400/30 group-hover:scale-105 transition-transform">
-              <Layers className="h-6 w-6" />
+        <div className="text-center space-y-1.5">
+          <Link to="/" className="inline-flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-sm">
+              <Layers className="h-4 w-4" />
             </div>
-            <span className="text-2xl font-bold tracking-tight text-white">
+            <span className="text-xl font-bold tracking-tight text-white">
               Collab<span className="text-indigo-400">Hub</span>
             </span>
           </Link>
 
           <div className="pt-2">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[11px] font-semibold uppercase tracking-wider mb-2 font-mono">
-              <KeyRound className="h-3 w-3" />
-              <span>Password Recovery</span>
-            </div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-white">
+            <h1 className="text-xl font-bold tracking-tight text-white">
               {submitted ? 'Check your email' : 'Reset your password'}
             </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-sm mx-auto">
+            <p className="text-xs text-slate-400 mt-0.5">
               {submitted
-                ? 'We have sent password reset instructions to your email address'
-                : 'Enter your registered email and we will send you a secure recovery link'}
+                ? 'We sent password reset instructions to your email address'
+                : 'Enter your email and we will send you a recovery link'}
             </p>
           </div>
         </div>
 
         {/* Card Panel */}
-        <div className="glass-panel rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/60 border border-slate-800/80 space-y-5">
+        <div className="rounded-2xl p-6 sm:p-7 shadow-xl bg-slate-900/80 border border-slate-800 space-y-4">
           
           {submitted ? (
             /* SUBMITTED SUCCESS VIEW */
-            <div className="space-y-5 animate-fade-in">
-              <div className="flex items-start gap-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 p-4 text-emerald-300">
-                <MailCheck className="h-6 w-6 shrink-0 text-emerald-400 mt-0.5" />
-                <div className="leading-relaxed text-xs">
-                  <h4 className="font-semibold text-emerald-200 text-sm">
-                    Recovery Link Dispatched
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex items-start gap-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 p-3.5 text-emerald-300 text-xs">
+                <MailCheck className="h-5 w-5 shrink-0 text-emerald-400 mt-0.5" />
+                <div className="leading-relaxed">
+                  <h4 className="font-semibold text-emerald-200 text-xs">
+                    Recovery email sent
                   </h4>
-                  <p className="mt-1 text-slate-300">
-                    If an account is associated with <strong className="text-white font-mono">{email}</strong>, we have sent password reset instructions.
+                  <p className="mt-0.5 text-slate-300">
+                    If an account exists for <strong className="text-white font-mono">{email}</strong>, we have sent instructions.
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-2.5 pt-1">
+              <div className="space-y-2 pt-1">
                 <Link to="/login" className="block w-full">
                   <Button
                     variant="primary"
-                    size="md"
+                    size="sm"
                     icon={ArrowLeft}
                     iconPosition="left"
-                    className="w-full"
+                    className="w-full text-xs"
                   >
-                    Return to Sign In
+                    Back to sign in
                   </Button>
                 </Link>
 
@@ -129,9 +121,9 @@ const ForgotPassword = () => {
                     setSubmitted(false);
                     setEmail('');
                   }}
-                  className="w-full text-center text-xs text-slate-400 hover:text-slate-200 transition-colors py-1.5 cursor-pointer focus:outline-none"
+                  className="w-full text-center text-xs text-slate-400 hover:text-slate-200 transition-colors py-1 cursor-pointer"
                 >
-                  Use a different email address
+                  Try another email
                 </button>
               </div>
             </div>
@@ -141,19 +133,19 @@ const ForgotPassword = () => {
               {error && (
                 <Alert
                   variant="error"
-                  title="Recovery Error"
+                  title="Recovery error"
                   onClose={() => setError(null)}
                 >
                   {error}
                 </Alert>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-3.5">
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  label="Registered Email Address"
+                  label="Registered email address"
                   required
                   autoComplete="email"
                   value={email}
@@ -163,7 +155,7 @@ const ForgotPassword = () => {
                   }}
                   placeholder="name@company.com"
                   icon={Mail}
-                  helperText="Your reset link will remain active for 15 minutes."
+                  autoFocus
                 />
 
                 <div className="pt-1">
@@ -173,28 +165,28 @@ const ForgotPassword = () => {
                     loading={loading}
                     icon={ArrowRight}
                     iconPosition="right"
-                    className="w-full"
+                    className="w-full text-xs font-semibold"
                     size="md"
                   >
-                    {loading ? 'Sending reset link...' : 'Send Reset Link'}
+                    {loading ? 'Sending link...' : 'Send reset link'}
                   </Button>
                 </div>
               </form>
 
-              <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
                 <Link
                   to="/login"
-                  className="flex items-center gap-1 font-semibold text-slate-300 hover:text-white transition-colors"
+                  className="flex items-center gap-1 font-medium text-slate-300 hover:text-white transition-colors"
                 >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  <span>Back to Sign In</span>
+                  <ArrowLeft className="h-3 w-3" />
+                  <span>Sign in</span>
                 </Link>
 
                 <Link
                   to="/register"
                   className="font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
                 >
-                  Create account &rarr;
+                  Sign up &rarr;
                 </Link>
               </div>
             </>
@@ -202,12 +194,12 @@ const ForgotPassword = () => {
 
         </div>
 
-        {/* Bottom Health Badge */}
-        <div className="flex items-center justify-center gap-2 text-xs text-slate-400 font-mono">
-          <Server className="h-3.5 w-3.5 text-indigo-400" />
-          <span>FastAPI Service:</span>
-          <span className={healthInfo.isOnline ? 'text-emerald-400 font-semibold' : 'text-slate-400'}>
-            {healthInfo.isOnline ? 'Healthy' : 'Checking...'}
+        {/* Bottom Status */}
+        <div className="flex items-center justify-center gap-2 text-xs text-slate-500 font-mono">
+          <Server className="h-3 w-3 text-indigo-400" />
+          <span>API:</span>
+          <span className={healthInfo.isOnline ? 'text-emerald-400' : 'text-slate-400'}>
+            {healthInfo.isOnline ? 'Connected' : 'Checking...'}
           </span>
         </div>
 

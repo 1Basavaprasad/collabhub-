@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -48,6 +48,16 @@ class CompanyMember(Base):
         Enum(CompanyRole, name="company_role"),
         nullable=False,
         default=CompanyRole.MEMBER,
+    )
+
+    designation: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    department: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
     )
 
     joined_at: Mapped[datetime] = mapped_column(

@@ -12,9 +12,9 @@ import {
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(() => localStorage.getItem('collabhub_token') || null);
+  const [token, setToken] = useState(() => sessionStorage.getItem('collabhub_token') || null);
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('collabhub_user');
+    const savedUser = sessionStorage.getItem('collabhub_user');
     try {
       return savedUser ? JSON.parse(savedUser) : null;
     } catch {
@@ -57,13 +57,13 @@ export const AuthProvider = ({ children }) => {
     try {
       const userData = await getMeApi();
       setUser(userData);
-      localStorage.setItem('collabhub_user', JSON.stringify(userData));
+      sessionStorage.setItem('collabhub_user', JSON.stringify(userData));
       return userData;
     } catch (error) {
       // If token is invalid or expired
       if (error.response && error.response.status === 401) {
-        localStorage.removeItem('collabhub_token');
-        localStorage.removeItem('collabhub_user');
+        sessionStorage.removeItem('collabhub_token');
+        sessionStorage.removeItem('collabhub_user');
         setToken(null);
         setUser(null);
       }
@@ -76,13 +76,20 @@ export const AuthProvider = ({ children }) => {
     let isMounted = true;
 
     const initAuth = async () => {
-      const savedToken = localStorage.getItem('collabhub_token');
+      const savedToken = sessionStorage.getItem('collabhub_token');
       if (savedToken) {
         try {
           await fetchCurrentUser();
         } catch {
           // Token was invalid / expired, already cleared in fetchCurrentUser
+          sessionStorage.removeItem('collabhub_token');
+          sessionStorage.removeItem('collabhub_user');
+          setToken(null);
+          setUser(null);
         }
+      } else {
+        setToken(null);
+        setUser(null);
       }
       
       // Also check API health
@@ -97,6 +104,8 @@ export const AuthProvider = ({ children }) => {
 
     // Listen for global unauthorized events dispatched by Axios interceptor
     const handleUnauthorized = () => {
+      sessionStorage.removeItem('collabhub_token');
+      sessionStorage.removeItem('collabhub_user');
       setToken(null);
       setUser(null);
     };
@@ -114,8 +123,8 @@ export const AuthProvider = ({ children }) => {
     const data = await loginApi({ email, password });
     const accessToken = data.access_token;
     
-    // Save token
-    localStorage.setItem('collabhub_token', accessToken);
+    // Save token to this tab's sessionStorage
+    sessionStorage.setItem('collabhub_token', accessToken);
     setToken(accessToken);
 
     // Fetch user details immediately
@@ -140,8 +149,8 @@ export const AuthProvider = ({ children }) => {
 
   // Logout handler
   const logout = () => {
-    localStorage.removeItem('collabhub_token');
-    localStorage.removeItem('collabhub_user');
+    sessionStorage.removeItem('collabhub_token');
+    sessionStorage.removeItem('collabhub_user');
     setToken(null);
     setUser(null);
   };
@@ -149,7 +158,7 @@ export const AuthProvider = ({ children }) => {
   const value = {
     token,
     user,
-    isAuthenticated: Boolean(token && user),
+    isAuthenticated: Boolean(token && user && user.id),
     loading,
     healthInfo,
     login,

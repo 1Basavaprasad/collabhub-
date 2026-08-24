@@ -7,13 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-
 from app.models.company_member import CompanyRole
 from app.models.user import User
 
 from app.schemas.company import (
     CompanyCreate,
+    CompanyMemberCreate,
     CompanyMemberResponse,
+    CompanyMemberUpdate,
+    CompanyMemberWithUserResponse,
     CompanyResponse,
     CompanyUpdate,
 )
@@ -21,19 +23,26 @@ from app.schemas.company import (
 from app.schemas.company_invitation import (
     CompanyInvitationCreate,
     CompanyInvitationResponse,
+    CompanyInvitationVerifyResponse,
 )
 
 from app.services.company import (
     add_member_to_company_service,
     create_company_service,
+    get_company_members_service,
     get_company_service,
     get_my_companies_list,
     get_my_company,
+    update_company_member_service,
     update_company_service,
 )
 
 from app.services.company_invitation import (
+    accept_company_invitation_service,
     create_company_invitation_service,
+    get_company_invitations_service,
+    revoke_company_invitation_service,
+    verify_company_invitation_service,
 )
 
 
@@ -42,6 +51,58 @@ router = APIRouter(
     tags=["Companies"],
 )
 
+
+# ============================================================
+# COMPANY INVITATION VERIFICATION
+# ============================================================
+
+@router.get(
+    "/invitations/verify/{token}",
+    response_model=CompanyInvitationVerifyResponse,
+)
+def verify_company_invitation(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    invitation, company = verify_company_invitation_service(
+        db=db,
+        raw_token=token,
+    )
+
+    return CompanyInvitationVerifyResponse(
+        company_id=invitation.company_id,
+        company_name=company.name,
+        email=invitation.email,
+        role=invitation.role,
+        designation=invitation.designation,
+        department=invitation.department,
+        expires_at=invitation.expires_at,
+    )
+
+
+# ============================================================
+# COMPANY INVITATION ACCEPTANCE
+# ============================================================
+
+@router.post(
+    "/invitations/accept/{token}",
+    response_model=CompanyInvitationResponse,
+)
+def accept_company_invitation(
+    token: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return accept_company_invitation_service(
+        db=db,
+        raw_token=token,
+        user_id=current_user.id,
+    )
+
+
+# ============================================================
+# COMPANY
+# ============================================================
 
 @router.post(
     "",
@@ -136,6 +197,26 @@ def update_company(
     )
 
 
+# ============================================================
+# COMPANY MEMBERS
+# ============================================================
+
+@router.get(
+    "/{company_id}/members",
+    response_model=list[CompanyMemberWithUserResponse],
+)
+def get_company_members(
+    company_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_company_members_service(
+        db=db,
+        company_id=company_id,
+        user_id=current_user.id,
+    )
+
+
 @router.post(
     "/{company_id}/members",
     response_model=CompanyMemberResponse,
@@ -145,6 +226,8 @@ def add_company_member(
     company_id: uuid.UUID,
     user_id: uuid.UUID,
     role: CompanyRole = CompanyRole.MEMBER,
+    designation: str | None = None,
+    department: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -154,6 +237,50 @@ def add_company_member(
         current_user_id=current_user.id,
         new_user_id=user_id,
         role=role,
+        designation=designation,
+        department=department,
+    )
+
+
+@router.patch(
+    "/{company_id}/members/{user_id}",
+    response_model=CompanyMemberWithUserResponse,
+)
+def update_company_member(
+    company_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: CompanyMemberUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return update_company_member_service(
+        db=db,
+        company_id=company_id,
+        target_user_id=user_id,
+        requesting_user_id=current_user.id,
+        role=data.role,
+        designation=data.designation,
+        department=data.department,
+    )
+
+
+# ============================================================
+# COMPANY INVITATIONS MANAGEMENT
+# ============================================================
+
+@router.get(
+    "/{company_id}/invitations",
+    response_model=list[CompanyInvitationResponse],
+)
+def get_company_invitations(
+    company_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_company_invitations_service(
+        db=db,
+        company_id=company_id,
+        requesting_user_id=current_user.id,
     )
 
 
@@ -174,6 +301,26 @@ def create_company_invitation(
         inviter_user_id=current_user.id,
         email=data.email,
         role=data.role,
+        designation=data.designation,
+        department=data.department,
     )
 
     return invitation
+
+
+@router.post(
+    "/{company_id}/invitations/{invitation_id}/revoke",
+    response_model=CompanyInvitationResponse,
+)
+def revoke_company_invitation(
+    company_id: uuid.UUID,
+    invitation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return revoke_company_invitation_service(
+        db=db,
+        company_id=company_id,
+        invitation_id=invitation_id,
+        requesting_user_id=current_user.id,
+    )

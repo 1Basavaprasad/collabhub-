@@ -1,11 +1,20 @@
 import api from './axios';
 
 /**
- * Get the current authenticated user's company
+ * Get the current authenticated user's active/primary company
  * @returns {Promise<Object>} - Company details with profile_completeness
  */
 export const getMyCompanyApi = async () => {
   const response = await api.get('/companies/me');
+  return response.data;
+};
+
+/**
+ * Get all companies the authenticated user belongs to
+ * @returns {Promise<Array<Object>>} - List of companies
+ */
+export const getMyCompaniesListApi = async () => {
+  const response = await api.get('/companies');
   return response.data;
 };
 
@@ -66,5 +75,114 @@ export const updateCompanyApi = async (companyId, data) => {
   if (data.logo_url !== undefined) payload.logo_url = data.logo_url ? data.logo_url.trim() : null;
 
   const response = await api.patch(`/companies/${companyId}`, payload);
+  return response.data;
+};
+
+/**
+ * Get all members of a company (including user details, role, designation, department)
+ * @param {string} companyId - UUID of the company
+ * @returns {Promise<Array<Object>>} - List of company members with user summaries
+ */
+export const getCompanyMembersApi = async (companyId) => {
+  const response = await api.get(`/companies/${companyId}/members`);
+  return response.data;
+};
+
+/**
+ * Directly add a member to the company (OWNER/ADMIN only)
+ * @param {string} companyId - UUID of the company
+ * @param {Object} data - { user_id, role, designation, department }
+ * @returns {Promise<Object>} - Created membership
+ */
+export const createCompanyMemberApi = async (
+  companyId,
+  { user_id, role = 'MEMBER', designation, department }
+) => {
+  const params = new URLSearchParams({
+    user_id,
+    role: role || 'MEMBER',
+  });
+  if (designation?.trim()) params.append('designation', designation.trim());
+  if (department?.trim()) params.append('department', department.trim());
+
+  const response = await api.post(`/companies/${companyId}/members?${params.toString()}`);
+  return response.data;
+};
+
+/**
+ * Update an existing member's role, designation, or department (OWNER/ADMIN only)
+ * @param {string} companyId - UUID of the company
+ * @param {string} userId - UUID of the user/member
+ * @param {Object} data - { role?, designation?, department? }
+ * @returns {Promise<Object>} - Updated company member
+ */
+export const updateCompanyMemberApi = async (companyId, userId, data) => {
+  const payload = {};
+  if (data.role !== undefined) payload.role = data.role;
+  if (data.designation !== undefined) payload.designation = data.designation ? data.designation.trim() : null;
+  if (data.department !== undefined) payload.department = data.department ? data.department.trim() : null;
+
+  const response = await api.patch(`/companies/${companyId}/members/${userId}`, payload);
+  return response.data;
+};
+
+/**
+ * Create a company invitation for a user by email
+ * @param {string} companyId - UUID of the company
+ * @param {Object} data - { email: string, role?: string, designation?: string, department?: string }
+ * @returns {Promise<Object>} - Created invitation details
+ */
+export const createCompanyInvitationApi = async (
+  companyId,
+  { email, role = 'MEMBER', designation, department }
+) => {
+  const payload = {
+    email: email?.trim().toLowerCase(),
+    role: role || 'MEMBER',
+    designation: designation?.trim() || null,
+    department: department?.trim() || null,
+  };
+  const response = await api.post(`/companies/${companyId}/invitations`, payload);
+  return response.data;
+};
+
+/**
+ * Get all company invitations (OWNER/ADMIN only)
+ * @param {string} companyId - UUID of the company
+ * @returns {Promise<Array<Object>>} - List of company invitations
+ */
+export const getCompanyInvitationsApi = async (companyId) => {
+  const response = await api.get(`/companies/${companyId}/invitations`);
+  return response.data;
+};
+
+/**
+ * Revoke a pending company invitation (OWNER/ADMIN only)
+ * @param {string} companyId - UUID of the company
+ * @param {string} invitationId - UUID of the invitation
+ * @returns {Promise<Object>} - Revoked invitation details
+ */
+export const revokeCompanyInvitationApi = async (companyId, invitationId) => {
+  const response = await api.post(`/companies/${companyId}/invitations/${invitationId}/revoke`);
+  return response.data;
+};
+
+/**
+ * Verify an invitation token before accepting it
+ * @param {string} token - Raw invitation token
+ * @returns {Promise<Object>} - { company_id, company_name, email, role, designation, department, expires_at }
+ */
+export const verifyCompanyInvitationApi = async (token) => {
+  const response = await api.get(`/companies/invitations/verify/${encodeURIComponent(token)}`);
+  return response.data;
+};
+
+/**
+ * Accept a company invitation using the authenticated user's credentials
+ * @param {string} token - Raw invitation token
+ * @returns {Promise<Object>} - Accepted CompanyInvitationResponse
+ */
+export const acceptCompanyInvitationApi = async (token) => {
+  const response = await api.post(`/companies/invitations/accept/${encodeURIComponent(token)}`);
   return response.data;
 };

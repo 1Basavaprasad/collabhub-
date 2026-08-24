@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CompanyProvider } from './context/CompanyContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicRoute from './components/PublicRoute';
 import Login from './pages/Login';
@@ -9,14 +10,16 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Company from './pages/Company';
+import AcceptInvitation from './pages/AcceptInvitation';
 import NotFound from './pages/NotFound';
 
 function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <CompanyProvider>
-          <Routes>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <CompanyProvider>
+            <Routes>
             {/* Public Routes - redirect to /dashboard if already authenticated */}
             <Route element={<PublicRoute />}>
               <Route path="/login" element={<Login />} />
@@ -31,6 +34,9 @@ function App() {
               <Route path="/company" element={<Company />} />
             </Route>
 
+            {/* Standalone Invitation Verification & Acceptance Route */}
+            <Route path="/invitations/accept" element={<AcceptInvitation />} />
+
             {/* Root Redirect to Dashboard (ProtectedRoute handles auth gate) */}
             <Route
               path="/"
@@ -44,9 +50,10 @@ function App() {
             {/* Catch-all Not Found Route */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </CompanyProvider>
-      </AuthProvider>
-    </BrowserRouter>
+          </CompanyProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

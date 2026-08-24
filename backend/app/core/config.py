@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     # JWT Authentication Settings
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = "default-secret-key-for-development"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
@@ -27,11 +27,19 @@ class Settings(BaseSettings):
     # Direct database URL override (optional)
     DATABASE_URL: Optional[str] = None
 
-    # Email Settings
-    EMAIL_API_KEY: str
-    EMAIL_FROM: str
+    # Resend Email Settings (Optional / Legacy)
+    EMAIL_API_KEY: Optional[str] = None
+    EMAIL_FROM: Optional[str] = None
 
-    # Frontend URL
+    # SMTP Email Settings (Gmail / Standard SMTP)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = None
+    SMTP_FROM_NAME: str = "CollabHub"
+
+    # Frontend URL for Invitation & Reset Links
     FRONTEND_URL: str = "http://localhost:5173"
 
     @computed_field  # type: ignore[prop-decorator]

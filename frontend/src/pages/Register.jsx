@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Input from '../components/Input';
 import PasswordInput from '../components/PasswordInput';
@@ -41,6 +41,10 @@ const RequirementCheck = ({ passed, text }) => (
 const Register = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const redirectParam = searchParams.get('redirect');
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -139,7 +143,10 @@ const Register = () => {
 
       // Redirect user to login page after short delay with prefilled email
       setTimeout(() => {
-        navigate('/login', {
+        const loginPath = redirectParam
+          ? `/login?redirect=${encodeURIComponent(redirectParam)}`
+          : '/login';
+        navigate(loginPath, {
           state: {
             registered: true,
             email: formData.email.trim(),

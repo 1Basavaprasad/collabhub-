@@ -55,6 +55,16 @@ class CompanyInvitation(Base):
         default=CompanyRole.MEMBER,
     )
 
+    designation: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    department: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
     token_hash: Mapped[str] = mapped_column(
         String(255),
         nullable=False,

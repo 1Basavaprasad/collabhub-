@@ -18,7 +18,7 @@ const api = axios.create({
 // Request interceptor to automatically attach Authorization header
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('collabhub_token');
+    const token = sessionStorage.getItem('collabhub_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -37,9 +37,9 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       // If token is expired or unauthorized, clear storage and notify app
-      const hadToken = !!localStorage.getItem('collabhub_token');
-      localStorage.removeItem('collabhub_token');
-      localStorage.removeItem('collabhub_user');
+      const hadToken = !!sessionStorage.getItem('collabhub_token');
+      sessionStorage.removeItem('collabhub_token');
+      sessionStorage.removeItem('collabhub_user');
 
       // Dispatch an event so AuthContext or Router can respond gracefully if needed
       if (hadToken) {

@@ -1,4 +1,5 @@
 import uuid
+from unittest.mock import patch
 # pyrefly: ignore [missing-import]
 from starlette.testclient import TestClient
 
@@ -32,107 +33,349 @@ def _create_and_login_user(suffix: str, full_name: str = "Test User"):
     token = login_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    return {"id": user_id, "email": email, "username": username, "headers": headers}
+    return {"id": user_id, "email": email, "username": username, "full_name": full_name, "headers": headers}
 
 
-def test_company_multi_membership_lifecycle():
+@patch("app.services.company_invitation.send_company_invitation_email")
+def test_company_multi_membership_and_member_management(mock_send_email):
     suffix1 = uuid.uuid4().hex[:8]
     suffix2 = uuid.uuid4().hex[:8]
     suffix3 = uuid.uuid4().hex[:8]
+    suffix4 = uuid.uuid4().hex[:8]
+    suffix5 = uuid.uuid4().hex[:8]
 
-    user1 = _create_and_login_user(suffix1, "Primary Owner")
-    user2 = _create_and_login_user(suffix2, "Secondary Owner / Admin")
-    user3 = _create_and_login_user(suffix3, "Non Member")
+    owner1 = _create_and_login_user(suffix1, "Primary Owner Basava")
+    owner2 = _create_and_login_user(suffix2, "Secondary Owner Arjun")
+    admin1 = _create_and_login_user(suffix3, "Admin Priya")
+    member1 = _create_and_login_user(suffix4, "Member Rahul")
+    outsider = _create_and_login_user(suffix5, "Outsider User")
 
     # 1. GET /companies/me before creation -> 404
-    pre_get = client.get("/companies/me", headers=user1["headers"])
+    pre_get = client.get("/companies/me", headers=owner1["headers"])
     assert pre_get.status_code == 404
     assert "You do not belong to any company" in pre_get.json()["detail"]
 
-    # 2. POST /companies: user1 creates Company A (creator automatically becomes OWNER)
+    # 2. POST /companies: owner1 creates Company (creator automatically becomes OWNER)
     create_res = client.post(
         "/companies",
-        headers=user1["headers"],
+        headers=owner1["headers"],
         json={
-            "name": "Acme Innovations",
-            "description": "Building future tech tools",
+            "name": "BRN Tech",
+            "description": "Enterprise cloud platform",
+            "industry": "Software & AI",
+            "company_size": "51-200",
+            "country": "India",
+            "city": "Bengaluru",
+            "website": "https://brntech.com",
+            "logo_url": "https://brntech.com/logo.png",
         },
     )
     assert create_res.status_code == 201
-    comp_a = create_res.json()
-    comp_a_id = comp_a["id"]
-    assert comp_a["name"] == "Acme Innovations"
-    assert comp_a["profile_completeness"] == 35
+    company = create_res.json()
+    company_id = company["id"]
+    assert company["name"] == "BRN Tech"
+    assert company["profile_completeness"] == 100
 
-    # 3. GET /companies/me returns Company A
-    me_res = client.get("/companies/me", headers=user1["headers"])
-    assert me_res.status_code == 200
-    assert me_res.json()["id"] == comp_a_id
-
-    # 4. Multi-Company: user1 can create a second Company B
-    create_b_res = client.post(
-        "/companies",
-        headers=user1["headers"],
-        json={"name": "Acme Ventures"},
+    # 3. Multiple Owners: Add owner2 with designation and department
+    add_owner2_res = client.post(
+        f"/companies/{company_id}/members?user_id={owner2['id']}&role=OWNER&designation=Co-Founder&department=Management",
+        headers=owner1["headers"],
     )
-    assert create_b_res.status_code == 201
-    comp_b_id = create_b_res.json()["id"]
+    assert add_owner2_res.status_code == 201
+    assert add_owner2_res.json()["role"] == "OWNER"
+    assert add_owner2_res.json()["designation"] == "Co-Founder"
+    assert add_owner2_res.json()["department"] == "Management"
 
-    # 5. List user1 companies -> both Company A and Company B
-    list_res = client.get("/companies", headers=user1["headers"])
-    assert list_res.status_code == 200
-    comp_ids = [c["id"] for c in list_res.json()]
-    assert comp_a_id in comp_ids
-    assert comp_b_id in comp_ids
-
-    # 6. Multiple Owners & Members: user1 adds user2 as OWNER to Company A
-    add_owner_res = client.post(
-        f"/companies/{comp_a_id}/members?user_id={user2['id']}&role=OWNER",
-        headers=user1["headers"],
+    # 4. Add admin1 as ADMIN
+    add_admin1_res = client.post(
+        f"/companies/{company_id}/members?user_id={admin1['id']}&role=ADMIN&designation=Engineering%20Manager&department=Engineering",
+        headers=owner1["headers"],
     )
-    assert add_owner_res.status_code == 201
-    assert add_owner_res.json()["role"] == "OWNER"
+    assert add_admin1_res.status_code == 201
+    assert add_admin1_res.json()["role"] == "ADMIN"
+    assert add_admin1_res.json()["designation"] == "Engineering Manager"
 
-    # 7. Duplicate Prevention: Cannot add user2 again to Company A
-    dup_add_res = client.post(
-        f"/companies/{comp_a_id}/members?user_id={user2['id']}&role=MEMBER",
-        headers=user1["headers"],
+    # 5. Add member1 as MEMBER
+    add_member1_res = client.post(
+        f"/companies/{company_id}/members?user_id={member1['id']}&role=MEMBER&designation=Backend%20Developer&department=Engineering",
+        headers=owner1["headers"],
     )
-    assert dup_add_res.status_code == 400
-    assert "already a member" in dup_add_res.json()["detail"]
+    assert add_member1_res.status_code == 201
+    assert add_member1_res.json()["role"] == "MEMBER"
+    assert add_member1_res.json()["designation"] == "Backend Developer"
+    assert add_member1_res.json()["department"] == "Engineering"
 
-    # 8. User2 can access Company A (200 OK)
-    user2_get = client.get(f"/companies/{comp_a_id}", headers=user2["headers"])
-    assert user2_get.status_code == 200
-    assert user2_get.json()["id"] == comp_a_id
+    # 6. Duplicate membership rejection
+    dup_res = client.post(
+        f"/companies/{company_id}/members?user_id={member1['id']}&role=MEMBER",
+        headers=owner1["headers"],
+    )
+    assert dup_res.status_code == 400
+    assert "already a member" in dup_res.json()["detail"]
 
-    # 9. User2 (as OWNER) can update Company A profile fields
-    patch_res = client.patch(
-        f"/companies/{comp_a_id}",
-        headers=user2["headers"],
+    # 7. GET /companies/{company_id}/members: Lists all members with safe user summaries
+    members_res = client.get(f"/companies/{company_id}/members", headers=member1["headers"])
+    assert members_res.status_code == 200
+    members_list = members_res.json()
+    assert len(members_list) == 4
+    
+    # Check user information is included safely
+    for m in members_list:
+        assert "user" in m
+        assert "password_hash" not in m["user"]
+        assert "email" in m["user"]
+        assert "username" in m["user"]
+        assert "full_name" in m["user"]
+
+    # 8. Outsider cannot access members -> 403 Forbidden
+    outsider_get = client.get(f"/companies/{company_id}/members", headers=outsider["headers"])
+    assert outsider_get.status_code == 403
+    assert "You do not have access" in outsider_get.json()["detail"]
+
+    # 9. Company invitation can contain designation and department
+    invitation_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=admin1["headers"],
         json={
-            "industry": "Software & AI",
-            "company_size": "11-50",
-            "country": "United States",
-            "city": "San Francisco",
-            "website": "https://acmeinnovations.com",
-            "logo_url": "https://acmeinnovations.com/logo.png",
+            "email": "priya.qa@example.com",
+            "role": "MEMBER",
+            "designation": "QA Lead",
+            "department": "Quality Assurance",
         },
     )
-    assert patch_res.status_code == 200
-    patched_data = patch_res.json()
-    assert patched_data["industry"] == "Software & AI"
-    assert patched_data["profile_completeness"] == 100
+    assert invitation_res.status_code == 201
+    inv_data = invitation_res.json()
+    assert inv_data["email"] == "priya.qa@example.com"
+    assert inv_data["role"] == "MEMBER"
+    assert inv_data["designation"] == "QA Lead"
+    assert inv_data["department"] == "Quality Assurance"
+    assert inv_data["status"] == "PENDING"
 
-    # 10. Non-member (user3) cannot access Company A -> 403 Forbidden
-    non_member_get = client.get(f"/companies/{comp_a_id}", headers=user3["headers"])
-    assert non_member_get.status_code == 403
-    assert "You do not have access" in non_member_get.json()["detail"]
-
-    # 11. Non-member (user3) cannot patch Company A -> 403 Forbidden
-    non_member_patch = client.patch(
-        f"/companies/{comp_a_id}",
-        headers=user3["headers"],
-        json={"name": "Hacked Name"},
+    # 10. MEMBER cannot update another member -> 403 Forbidden
+    member_patch = client.patch(
+        f"/companies/{company_id}/members/{admin1['id']}",
+        headers=member1["headers"],
+        json={"designation": "Hacked Title"},
     )
-    assert non_member_patch.status_code == 403
+    assert member_patch.status_code == 403
+    assert "Members cannot modify company members" in member_patch.json()["detail"]
+
+    # 11. ADMIN can update MEMBER's designation and department
+    admin_patch_member = client.patch(
+        f"/companies/{company_id}/members/{member1['id']}",
+        headers=admin1["headers"],
+        json={
+            "designation": "Senior Backend Developer",
+            "department": "Platform Core",
+        },
+    )
+    assert admin_patch_member.status_code == 200
+    assert admin_patch_member.json()["designation"] == "Senior Backend Developer"
+    assert admin_patch_member.json()["department"] == "Platform Core"
+
+    # 12. ADMIN cannot modify OWNER -> 403 Forbidden
+    admin_patch_owner = client.patch(
+        f"/companies/{company_id}/members/{owner1['id']}",
+        headers=admin1["headers"],
+        json={"designation": "Demoted"},
+    )
+    assert admin_patch_owner.status_code == 403
+    assert "Admins cannot modify company owners" in admin_patch_owner.json()["detail"]
+
+    # 13. ADMIN cannot promote anyone to OWNER -> 403 Forbidden
+    admin_promote = client.patch(
+        f"/companies/{company_id}/members/{member1['id']}",
+        headers=admin1["headers"],
+        json={"role": "OWNER"},
+    )
+    assert admin_promote.status_code == 403
+    assert "Admins cannot promote members to owner" in admin_promote.json()["detail"]
+
+    # 14. OWNER can update ADMIN role and designation
+    owner_patch_admin = client.patch(
+        f"/companies/{company_id}/members/{admin1['id']}",
+        headers=owner1["headers"],
+        json={
+            "designation": "Director of Engineering",
+            "role": "ADMIN",
+        },
+    )
+    assert owner_patch_admin.status_code == 200
+    assert owner_patch_admin.json()["designation"] == "Director of Engineering"
+
+    # 15. OWNER can update another OWNER
+    owner_patch_owner2 = client.patch(
+        f"/companies/{company_id}/members/{owner2['id']}",
+        headers=owner1["headers"],
+        json={"designation": "Executive Chairman"},
+    )
+    assert owner_patch_owner2.status_code == 200
+    assert owner_patch_owner2.json()["designation"] == "Executive Chairman"
+
+    # 16. Demoting an owner when multiple owners exist is ALLOWED
+    demote_owner2 = client.patch(
+        f"/companies/{company_id}/members/{owner2['id']}",
+        headers=owner1["headers"],
+        json={"role": "ADMIN"},
+    )
+    assert demote_owner2.status_code == 200
+    assert demote_owner2.json()["role"] == "ADMIN"
+
+    # 17. Demoting the LAST remaining OWNER -> 400 Bad Request
+    demote_last_owner = client.patch(
+        f"/companies/{company_id}/members/{owner1['id']}",
+        headers=owner1["headers"],
+        json={"role": "MEMBER"},
+    )
+    assert demote_last_owner.status_code == 400
+    assert "Company must have at least one owner" in demote_last_owner.json()["detail"]
+
+    # 18. Existing Company profile PATCH still works
+    patch_comp = client.patch(
+        f"/companies/{company_id}",
+        headers=owner1["headers"],
+        json={"description": "Updated company description"},
+    )
+    assert patch_comp.status_code == 200
+    assert patch_comp.json()["description"] == "Updated company description"
+
+    # 19. Invitation token verification and acceptance lifecycle
+    invitee_suffix = uuid.uuid4().hex[:8]
+    invitee_user = _create_and_login_user(invitee_suffix, "Invited Priya QA")
+
+    # Invite user with specific designation and department
+    create_inv_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=owner1["headers"],
+        json={
+            "email": invitee_user["email"],
+            "role": "MEMBER",
+            "designation": "Lead QA Engineer",
+            "department": "Quality & Testing",
+        },
+    )
+    assert create_inv_res.status_code == 201
+
+    # Extract raw token from service or database query
+    from app.core.database import SessionLocal
+    from app.repositories.company_invitation import get_pending_invitation
+    from app.services.company_invitation import _hash_invitation_token
+    import secrets
+
+    # For testing verification and acceptance endpoints, let's create a test invitation with known raw token
+    test_db = SessionLocal()
+    try:
+        from app.repositories.company_invitation import create_invitation
+        from datetime import datetime, timezone, timedelta
+
+        raw_test_token = secrets.token_urlsafe(32)
+        test_hash = _hash_invitation_token(raw_test_token)
+        create_invitation(
+            db=test_db,
+            company_id=uuid.UUID(company_id),
+            email=invitee_user["email"],
+            role="MEMBER",
+            token_hash=test_hash,
+            invited_by=uuid.UUID(owner1["id"]),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=72),
+            designation="Staff QA Engineer",
+            department="Quality Assurance",
+        )
+    finally:
+        test_db.close()
+
+    # 20. GET /companies/invitations/verify/{token}
+    verify_res = client.get(f"/companies/invitations/verify/{raw_test_token}")
+    assert verify_res.status_code == 200
+    v_data = verify_res.json()
+    assert v_data["company_name"] == "BRN Tech"
+    assert v_data["email"] == invitee_user["email"]
+    assert v_data["role"] == "MEMBER"
+    assert v_data["designation"] == "Staff QA Engineer"
+    assert v_data["department"] == "Quality Assurance"
+
+    # 21. Wrong user cannot accept invitation (403 Forbidden)
+    wrong_accept = client.post(
+        f"/companies/invitations/accept/{raw_test_token}",
+        headers=outsider["headers"],
+    )
+    assert wrong_accept.status_code == 403
+    assert "different email" in wrong_accept.json()["detail"]
+
+    # 22. Authenticated invitee accepts invitation (200 OK)
+    accept_res = client.post(
+        f"/companies/invitations/accept/{raw_test_token}",
+        headers=invitee_user["headers"],
+    )
+    assert accept_res.status_code == 200
+    assert accept_res.json()["status"] == "ACCEPTED"
+
+    # 23. Verify newly joined member is now in company members list with correct metadata
+    new_members_res = client.get(f"/companies/{company_id}/members", headers=invitee_user["headers"])
+    assert new_members_res.status_code == 200
+    members_data = new_members_res.json()
+    joined_member = next((m for m in members_data if m["user_id"] == invitee_user["id"]), None)
+    assert joined_member is not None
+    assert joined_member["role"] == "MEMBER"
+    assert joined_member["designation"] == "Staff QA Engineer"
+    assert joined_member["department"] == "Quality Assurance"
+
+    # 24. Cannot reuse accepted invitation (404 Not Found)
+    reuse_res = client.get(f"/companies/invitations/verify/{raw_test_token}")
+    assert reuse_res.status_code == 404
+
+    # 25. GET /companies/{company_id}/invitations - OWNER can view
+    owner_invs = client.get(f"/companies/{company_id}/invitations", headers=owner1["headers"])
+    assert owner_invs.status_code == 200
+    invs_list = owner_invs.json()
+    assert len(invs_list) >= 2
+    # Ensure no token_hash is exposed
+    for inv in invs_list:
+        assert "token_hash" not in inv
+        assert "email" in inv
+        assert "status" in inv
+        assert "role" in inv
+
+    # 26. GET /companies/{company_id}/invitations - ADMIN can view
+    admin_invs = client.get(f"/companies/{company_id}/invitations", headers=admin1["headers"])
+    assert admin_invs.status_code == 200
+
+    # 27. GET /companies/{company_id}/invitations - MEMBER cannot view (403 Forbidden)
+    member_invs = client.get(f"/companies/{company_id}/invitations", headers=member1["headers"])
+    assert member_invs.status_code == 403
+    assert "Only company owners and admins" in member_invs.json()["detail"]
+
+    # 28. Create a new pending invitation for revocation test
+    test_revoke_email = f"revoke_test_{uuid.uuid4().hex[:6]}@example.com"
+    new_inv_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=admin1["headers"],
+        json={"email": test_revoke_email, "role": "MEMBER", "designation": "Intern"},
+    )
+    assert new_inv_res.status_code == 201
+    new_inv_id = new_inv_res.json()["id"]
+
+    # 29. MEMBER cannot revoke invitation (403 Forbidden)
+    member_revoke = client.post(
+        f"/companies/{company_id}/invitations/{new_inv_id}/revoke",
+        headers=member1["headers"],
+    )
+    assert member_revoke.status_code == 403
+    assert "Only company owners and admins" in member_revoke.json()["detail"]
+
+    # 30. ADMIN can revoke invitation (200 OK)
+    admin_revoke = client.post(
+        f"/companies/{company_id}/invitations/{new_inv_id}/revoke",
+        headers=admin1["headers"],
+    )
+    assert admin_revoke.status_code == 200
+    assert admin_revoke.json()["status"] == "REVOKED"
+
+    # 31. Cannot revoke already revoked invitation (400 Bad Request)
+    repeat_revoke = client.post(
+        f"/companies/{company_id}/invitations/{new_inv_id}/revoke",
+        headers=owner1["headers"],
+    )
+    assert repeat_revoke.status_code == 400
+    assert "already been revoked" in repeat_revoke.json()["detail"]
+

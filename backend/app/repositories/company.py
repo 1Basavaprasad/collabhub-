@@ -1,7 +1,7 @@
 import uuid
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.company import Company
 from app.models.company_member import CompanyMember, CompanyRole
@@ -18,6 +18,8 @@ def create_company(
     city: str | None = None,
     website: str | None = None,
     logo_url: str | None = None,
+    creator_designation: str | None = None,
+    creator_department: str | None = None,
 ) -> Company:
     company = Company(
         name=name,
@@ -38,6 +40,8 @@ def create_company(
         company_id=company.id,
         user_id=creator_user_id,
         role=CompanyRole.OWNER,
+        designation=creator_designation,
+        department=creator_department,
     )
     db.add(membership)
     db.commit()
@@ -62,7 +66,9 @@ def get_company_membership(
     company_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> CompanyMember | None:
-    statement = select(CompanyMember).where(
+    statement = select(CompanyMember).options(
+        joinedload(CompanyMember.user)
+    ).where(
         CompanyMember.company_id == company_id,
         CompanyMember.user_id == user_id,
     )
@@ -104,14 +110,69 @@ def add_company_member(
     company_id: uuid.UUID,
     user_id: uuid.UUID,
     role: CompanyRole = CompanyRole.MEMBER,
+    designation: str | None = None,
+    department: str | None = None,
 ) -> CompanyMember:
     membership = CompanyMember(
         company_id=company_id,
         user_id=user_id,
         role=role,
+        designation=designation,
+        department=department,
     )
 
     db.add(membership)
+    db.commit()
+    db.refresh(membership)
+
+    return membership
+
+
+def get_company_members(
+    db: Session,
+    company_id: uuid.UUID,
+) -> list[CompanyMember]:
+    statement = (
+        select(CompanyMember)
+        .options(joinedload(CompanyMember.user))
+        .where(CompanyMember.company_id == company_id)
+        .order_by(CompanyMember.joined_at.asc())
+    )
+
+    return list(db.execute(statement).scalars().all())
+
+
+def count_company_owners(
+    db: Session,
+    company_id: uuid.UUID,
+) -> int:
+    statement = (
+        select(func.count(CompanyMember.id))
+        .where(
+            CompanyMember.company_id == company_id,
+            CompanyMember.role == CompanyRole.OWNER,
+        )
+    )
+
+    return db.execute(statement).scalar_one()
+
+
+def update_company_member(
+    db: Session,
+    membership: CompanyMember,
+    role: CompanyRole | None = None,
+    designation: str | None = None,
+    department: str | None = None,
+) -> CompanyMember:
+    if role is not None:
+        membership.role = role
+
+    if designation is not None:
+        membership.designation = designation.strip() if designation.strip() else None
+
+    if department is not None:
+        membership.department = department.strip() if department.strip() else None
+
     db.commit()
     db.refresh(membership)
 

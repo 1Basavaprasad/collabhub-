@@ -47,7 +47,9 @@ const Login = () => {
       await login(trimmedEmail, formData.password);
 
       // Redirect to intended route or dashboard
-      const destination = location.state?.from?.pathname || '/dashboard';
+      const searchParams = new URLSearchParams(location.search);
+      const redirectParam = searchParams.get('redirect');
+      const destination = redirectParam || location.state?.from?.pathname || '/dashboard';
       navigate(destination, { replace: true });
     } catch (err) {
       if (err.response) {
@@ -76,38 +78,32 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-mesh relative selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* Background ambient lighting */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] h-[480px] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-1/4 w-[350px] h-[350px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-25 pointer-events-none" />
-
-      {/* Main Centered Container */}
-      <div className="relative z-10 w-full max-w-[440px] space-y-6">
+    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-mesh selection:bg-indigo-500/30 selection:text-indigo-200">
+      <div className="w-full max-w-[400px] space-y-6">
         
         {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <Link to="/" className="inline-flex items-center gap-2.5 group">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-600/25 border border-indigo-400/30 group-hover:scale-105 transition-transform">
-              <Layers className="h-6 w-6" />
+        <div className="text-center space-y-1.5">
+          <Link to="/" className="inline-flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm font-bold text-sm">
+              <Layers className="h-4 w-4" />
             </div>
-            <span className="text-2xl font-bold tracking-tight text-white">
+            <span className="text-xl font-bold tracking-tight text-white">
               Collab<span className="text-indigo-400">Hub</span>
             </span>
           </Link>
 
           <div className="pt-2">
-            <h1 className="text-2xl font-extrabold tracking-tight text-white">
-              Sign in to CollabHub
+            <h1 className="text-xl font-bold tracking-tight text-white">
+              Sign in to your account
             </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Enter your credentials to access your company workspace
+            <p className="text-xs text-slate-400 mt-0.5">
+              Access your company workspaces and collaborate
             </p>
           </div>
         </div>
 
-        {/* Auth Glass Card */}
-        <div className="glass-panel rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/60 border border-slate-800/80 space-y-5">
+        {/* Auth Card */}
+        <div className="rounded-2xl p-6 sm:p-7 shadow-xl bg-slate-900/80 border border-slate-800 space-y-4">
           
           {/* Registration Success Banner */}
           {registrationSuccess && (
@@ -127,26 +123,27 @@ const Login = () => {
           {error && (
             <Alert
               variant="error"
-              title="Sign In Error"
+              title="Sign in error"
               onClose={() => setError(null)}
             >
               {error}
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
             {/* Email */}
             <Input
               id="email"
               name="email"
               type="email"
-              label="Email Address"
+              label="Email address"
               required
               autoComplete="email"
               value={formData.email}
               onChange={handleChange}
               placeholder="name@company.com"
               icon={Mail}
+              autoFocus
             />
 
             {/* Password */}
@@ -161,10 +158,10 @@ const Login = () => {
                 onChange={handleChange}
                 placeholder="••••••••"
               />
-              <div className="flex justify-end mt-1.5">
+              <div className="flex justify-end mt-1">
                 <Link
                   to="/forgot-password"
-                  className="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors focus:outline-none"
+                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors focus:outline-none"
                 >
                   Forgot password?
                 </Link>
@@ -179,16 +176,16 @@ const Login = () => {
                 loading={loading}
                 icon={ArrowRight}
                 iconPosition="right"
-                className="w-full"
+                className="w-full text-xs font-semibold"
                 size="md"
               >
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? 'Signing in...' : 'Sign in'}
               </Button>
             </div>
           </form>
 
           {/* Card Footer: Switch to Register */}
-          <div className="pt-4 border-t border-slate-800/80 text-center">
+          <div className="pt-3 border-t border-slate-800 text-center">
             <p className="text-xs text-slate-400">
               Don&apos;t have an account?{' '}
               <Link
@@ -203,11 +200,11 @@ const Login = () => {
         </div>
 
         {/* Bottom Health / Security Badge */}
-        <div className="flex items-center justify-center gap-2 text-xs text-slate-400 font-mono">
-          <Server className="h-3.5 w-3.5 text-indigo-400" />
-          <span>FastAPI Backend (8001):</span>
-          <span className={healthInfo.isOnline ? 'text-emerald-400 font-semibold' : 'text-slate-400'}>
-            {healthInfo.isOnline ? 'Connected' : 'Checking...'}
+        <div className="flex items-center justify-center gap-2 text-xs text-slate-500 font-mono">
+          <Server className="h-3 w-3 text-indigo-400" />
+          <span>API Connection:</span>
+          <span className={healthInfo.isOnline ? 'text-emerald-400' : 'text-slate-400'}>
+            {healthInfo.isOnline ? 'Online' : 'Checking...'}
           </span>
         </div>
 

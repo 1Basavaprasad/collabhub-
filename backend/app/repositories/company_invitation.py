@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.company_invitation import (
     CompanyInvitation,
@@ -19,6 +19,8 @@ def create_invitation(
     token_hash: str,
     invited_by: uuid.UUID,
     expires_at: datetime,
+    designation: str | None = None,
+    department: str | None = None,
 ) -> CompanyInvitation:
     invitation = CompanyInvitation(
         company_id=company_id,
@@ -28,6 +30,8 @@ def create_invitation(
         status=InvitationStatus.PENDING,
         invited_by=invited_by,
         expires_at=expires_at,
+        designation=designation,
+        department=department,
     )
 
     db.add(invitation)
@@ -44,6 +48,22 @@ def get_invitation_by_token_hash(
     return db.scalar(
         select(CompanyInvitation).where(
             CompanyInvitation.token_hash == token_hash
+        )
+    )
+
+
+def get_pending_invitation_by_token_hash(
+    db: Session,
+    token_hash: str,
+) -> CompanyInvitation | None:
+    return db.scalar(
+        select(CompanyInvitation)
+        .options(
+            joinedload(CompanyInvitation.company)
+        )
+        .where(
+            CompanyInvitation.token_hash == token_hash,
+            CompanyInvitation.status == InvitationStatus.PENDING,
         )
     )
 
@@ -92,6 +112,18 @@ def mark_invitation_revoked(
     invitation: CompanyInvitation,
 ) -> CompanyInvitation:
     invitation.status = InvitationStatus.REVOKED
+
+    db.commit()
+    db.refresh(invitation)
+
+    return invitation
+
+
+def mark_invitation_expired(
+    db: Session,
+    invitation: CompanyInvitation,
+) -> CompanyInvitation:
+    invitation.status = InvitationStatus.EXPIRED
 
     db.commit()
     db.refresh(invitation)

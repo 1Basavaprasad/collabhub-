@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.models.company_member import CompanyRole
+
 
 class CompanyCreate(BaseModel):
     name: str = Field(
@@ -114,13 +116,53 @@ class CompanyResponse(BaseModel):
         return min(score, 100)
 
 
+class CompanyMemberUserSummary(BaseModel):
+    id: uuid.UUID
+    email: str
+    username: str
+    full_name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CompanyMemberResponse(BaseModel):
     id: uuid.UUID
     company_id: uuid.UUID
     user_id: uuid.UUID
-    role: str
+    role: CompanyRole
+    designation: str | None = None
+    department: str | None = None
     joined_at: datetime
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CompanyMemberWithUserResponse(CompanyMemberResponse):
+    user: CompanyMemberUserSummary | None = None
+
+
+class CompanyMemberCreate(BaseModel):
+    user_id: uuid.UUID
+    role: CompanyRole = CompanyRole.MEMBER
+    designation: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+    department: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+
+class CompanyMemberUpdate(BaseModel):
+    role: CompanyRole | None = None
+    designation: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+    department: str | None = Field(
+        default=None,
+        max_length=100,
+    )
