@@ -2,19 +2,16 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-# pyrefly: ignore [missing-import]
 from sqlalchemy import Boolean, DateTime, String, func
-# pyrefly: ignore [missing-import]
 from sqlalchemy.dialects.postgresql import UUID
-# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-# pyrefly: ignore [missing-import]
 from app.core.database import Base
 
 
 if TYPE_CHECKING:
-    from app.models.company import Company
+    from app.models.company_invitation import CompanyInvitation
+    from app.models.company_member import CompanyMember
 
 
 class User(Base):
@@ -69,9 +66,16 @@ class User(Base):
         nullable=False,
     )
 
-    owned_company: Mapped["Company | None"] = relationship(
-        "Company",
-        back_populates="owner",
-        foreign_keys="Company.owner_id",
-        uselist=False,
+    # Multi-tenant membership relationship
+    company_memberships: Mapped[list["CompanyMember"]] = relationship(
+        "CompanyMember",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    # Company invitations sent by this user
+    sent_company_invitations: Mapped[list["CompanyInvitation"]] = relationship(
+        "CompanyInvitation",
+        back_populates="invited_by_user",
+        cascade="all, delete-orphan",
     )

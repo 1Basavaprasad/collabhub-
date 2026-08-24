@@ -47,30 +47,27 @@ const Navbar = ({ onToggleSidebar }) => {
           </Link>
         </div>
 
-        {/* Right: Health Check, User Profile Badge, Logout */}
-        <div className="flex items-center gap-2.5 sm:gap-4">
-          {/* API Health Pill */}
+        {/* Right: Connection Status & Profile Quick Actions */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* Subtle API Health Pill */}
           <button
             type="button"
             onClick={handleHealthRefresh}
-            title="Click to check API connection status"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-800 bg-slate-900/80 text-xs text-slate-300 hover:border-slate-700 hover:bg-slate-900 cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            title="Click to refresh connection status"
+            className="flex items-center gap-2 px-3 py-1 rounded-full border border-slate-800 bg-slate-900/60 text-xs text-slate-300 hover:border-slate-700 hover:bg-slate-900 cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
-            <span className="relative flex h-2 w-2">
-              {healthInfo.isOnline ? (
-                <>
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                </>
-              ) : (
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
-              )}
-            </span>
-            <span className="hidden sm:inline font-mono font-medium">
-              {healthInfo.isOnline ? 'API Healthy' : 'API Offline'}
+            <span
+              className={`h-2 w-2 rounded-full ${
+                healthInfo.isOnline
+                  ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]'
+                  : 'bg-rose-500'
+              }`}
+            />
+            <span className="hidden sm:inline font-mono text-[11px] text-slate-300">
+              {healthInfo.isOnline ? 'Online' : 'Offline'}
             </span>
             <RefreshCw
-              className={`h-3 w-3 text-slate-400 ${
+              className={`h-3 w-3 text-slate-500 ${
                 isRefreshingHealth ? 'animate-spin text-indigo-400' : ''
               }`}
             />
@@ -79,15 +76,15 @@ const Navbar = ({ onToggleSidebar }) => {
           {/* User Account Info */}
           {user && (
             <div className="flex items-center gap-2.5 pl-2 border-l border-slate-800/80">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-300 font-bold text-xs uppercase shadow-inner">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-bold text-xs uppercase">
                 {user.full_name
-                  ? user.full_name.charAt(0)
+                  ? user.full_name.charAt(0).toUpperCase()
                   : user.username
-                  ? user.username.charAt(0)
+                  ? user.username.charAt(0).toUpperCase()
                   : 'U'}
               </div>
               <div className="hidden md:flex flex-col text-left">
-                <span className="text-xs font-semibold text-slate-200 leading-tight">
+                <span className="text-xs font-medium text-slate-200 leading-tight">
                   {user.full_name || user.username}
                 </span>
                 <span className="text-[11px] text-slate-400 font-mono leading-tight">
@@ -99,13 +96,13 @@ const Navbar = ({ onToggleSidebar }) => {
 
           {/* Logout Button */}
           <Button
-            variant="secondary"
+            variant="ghost"
             size="xs"
             onClick={handleLogout}
             id="logout-btn"
             icon={LogOut}
             iconPosition="left"
-            className="hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300 transition-colors"
+            className="text-slate-400 hover:text-rose-300 hover:bg-rose-500/10"
           >
             <span className="hidden sm:inline">Sign Out</span>
           </Button>

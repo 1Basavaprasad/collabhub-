@@ -57,7 +57,7 @@ const UserProfile = () => {
               </h3>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-mono">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Active Session
+                Active
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-400 font-mono mt-0.5">
@@ -74,7 +74,7 @@ const UserProfile = () => {
           icon={RefreshCw}
           iconPosition="left"
         >
-          Refresh Profile
+          Refresh
         </Button>
       </div>
 
@@ -82,12 +82,10 @@ const UserProfile = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {/* Full Name */}
         <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 transition-all hover:border-slate-700/60">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
-              <User className="h-3.5 w-3.5 text-indigo-400" />
-              Full Name
-            </span>
-          </div>
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
+            <User className="h-3.5 w-3.5 text-indigo-400" />
+            Full Name
+          </span>
           <p className="text-sm font-semibold text-slate-200 mt-1">
             {user.full_name || '—'}
           </p>
@@ -95,12 +93,10 @@ const UserProfile = () => {
 
         {/* Username */}
         <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 transition-all hover:border-slate-700/60">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
-              <AtSign className="h-3.5 w-3.5 text-indigo-400" />
-              Username
-            </span>
-          </div>
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
+            <AtSign className="h-3.5 w-3.5 text-indigo-400" />
+            Username
+          </span>
           <p className="text-sm font-semibold text-slate-200 font-mono mt-1">
             @{user.username}
           </p>
@@ -116,7 +112,7 @@ const UserProfile = () => {
             <button
               onClick={() => copyToClipboard(user.email, 'email')}
               className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              title="Copy email to clipboard"
+              title="Copy email"
             >
               {copiedField === 'email' ? (
                 <Check className="h-3.5 w-3.5 text-emerald-400" />
@@ -125,22 +121,22 @@ const UserProfile = () => {
               )}
             </button>
           </div>
-          <p className="text-sm font-semibold text-slate-200 font-mono mt-1 truncate">
+          <p className="text-sm font-semibold text-slate-200 font-mono truncate">
             {user.email}
           </p>
         </div>
 
-        {/* User ID */}
+        {/* Account ID */}
         <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 transition-all hover:border-slate-700/60">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
               <Fingerprint className="h-3.5 w-3.5 text-indigo-400" />
-              Account UUID
+              Account ID
             </span>
             <button
               onClick={() => copyToClipboard(user.id, 'id')}
               className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              title="Copy User ID"
+              title="Copy Account ID"
             >
               {copiedField === 'id' ? (
                 <Check className="h-3.5 w-3.5 text-emerald-400" />
@@ -149,15 +145,12 @@ const UserProfile = () => {
               )}
             </button>
           </div>
-          <p
-            className="text-xs font-mono font-medium text-slate-300 mt-1 truncate"
-            title={user.id}
-          >
+          <p className="text-xs font-mono font-medium text-slate-300 truncate" title={user.id}>
             {user.id || '—'}
           </p>
         </div>
 
-        {/* Account Authorization Card (Full Width) */}
+        {/* Account Status (Full Width) */}
         <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 transition-all hover:border-slate-700/60 md:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -166,15 +159,15 @@ const UserProfile = () => {
               </div>
               <div>
                 <span className="text-xs font-semibold text-slate-200 block">
-                  FastAPI JWT Authorized Session
+                  Authenticated User Account
                 </span>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  Bearer token active in HTTP Authorization header (/auth/me verified)
+                <span className="text-[11px] text-slate-400">
+                  Verified session with organization access rights
                 </span>
               </div>
             </div>
-            <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase bg-emerald-500/10 text-emerald-300 border border-emerald-500/25 font-mono">
-              Authenticated
+            <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+              Verified
             </span>
           </div>
         </div>
