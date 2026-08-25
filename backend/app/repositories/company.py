@@ -1,10 +1,11 @@
 import uuid
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from app.models.company import Company
 from app.models.company_member import CompanyMember, CompanyRole
+from app.models.user import User
 
 
 def create_company(
@@ -143,15 +144,46 @@ def add_company_member(
 def get_company_members(
     db: Session,
     company_id: uuid.UUID,
-) -> list[CompanyMember]:
-    statement = (
+    page: int = 1,
+    limit: int = 20,
+    role: CompanyRole | None = None,
+    department: str | None = None,
+    search: str | None = None,
+) -> tuple[list[CompanyMember], int]:
+    base_query = (
         select(CompanyMember)
-        .options(joinedload(CompanyMember.user))
+        .join(User, CompanyMember.user_id == User.id)
         .where(CompanyMember.company_id == company_id)
-        .order_by(CompanyMember.joined_at.asc())
     )
 
-    return list(db.execute(statement).scalars().all())
+    if role is not None:
+        base_query = base_query.where(CompanyMember.role == role)
+    if department and department.strip():
+        base_query = base_query.where(CompanyMember.department.ilike(f"%{department.strip()}%"))
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        base_query = base_query.where(
+            or_(
+                User.full_name.ilike(term),
+                User.email.ilike(term),
+                User.username.ilike(term),
+                CompanyMember.designation.ilike(term),
+            )
+        )
+
+    count_statement = select(func.count()).select_from(base_query.subquery())
+    total = db.execute(count_statement).scalar_one()
+
+    items_statement = (
+        base_query
+        .options(contains_eager(CompanyMember.user))
+        .order_by(CompanyMember.joined_at.asc(), CompanyMember.id.asc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
+    items = list(db.execute(items_statement).scalars().all())
+
+    return items, total
 
 
 def count_company_owners(

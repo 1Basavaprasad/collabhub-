@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -92,4 +92,5 @@ class Team(Base):
 
     __table_args__ = (
         UniqueConstraint("company_id", "name", name="uq_teams_company_name"),
+        Index("ix_teams_company_archived_created", "company_id", "is_archived", "created_at"),
     )

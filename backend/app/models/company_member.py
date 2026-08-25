@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -91,4 +91,6 @@ class CompanyMember(Base):
 
     __table_args__ = (
         UniqueConstraint("company_id", "user_id", name="uq_company_members_company_user"),
+        Index("ix_company_members_company_joined", "company_id", "joined_at", "id"),
+        Index("ix_company_members_company_role", "company_id", "role"),
     )

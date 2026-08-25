@@ -1,10 +1,14 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-
-# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.rate_limiter import (
+    rate_limit_forgot_password,
+    rate_limit_login,
+    rate_limit_register,
+    rate_limit_reset_password,
+)
 from app.core.security import create_access_token
 from app.models.user import User
 from app.schemas.auth import (
@@ -13,8 +17,6 @@ from app.schemas.auth import (
     RegisterRequest,
     ResetPasswordRequest,
 )
-
-
 from app.services.auth import (
     forgot_password,
     login_user,
@@ -22,14 +24,22 @@ from app.services.auth import (
     reset_password,
 )
 
-
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
+    responses={
+        429: {
+            "description": "Too many requests. Rate limit exceeded.",
+        }
+    },
 )
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_register)],
+)
 def register(
     data: RegisterRequest,
     db: Session = Depends(get_db),
@@ -51,7 +61,10 @@ def register(
         )
 
 
-@router.post("/login")
+@router.post(
+    "/login",
+    dependencies=[Depends(rate_limit_login)],
+)
 def login(
     data: LoginRequest,
     db: Session = Depends(get_db),
@@ -86,8 +99,10 @@ def get_me(
     }
 
 
-
-@router.post("/forgot-password")
+@router.post(
+    "/forgot-password",
+    dependencies=[Depends(rate_limit_forgot_password)],
+)
 def forgot_password_request(
     data: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
@@ -100,7 +115,10 @@ def forgot_password_request(
     }
 
 
-@router.post("/reset-password")
+@router.post(
+    "/reset-password",
+    dependencies=[Depends(rate_limit_reset_password)],
+)
 def reset_password_request(
     data: ResetPasswordRequest,
     db: Session = Depends(get_db),
@@ -121,6 +139,7 @@ def reset_password_request(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         )
+
 
 
 

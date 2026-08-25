@@ -10,6 +10,8 @@ def _create_and_login_user(suffix: str, full_name: str = "Test User"):
     email = f"team_user_{suffix}@example.com"
     username = f"team_user_{suffix}"
     password = "SecurePassword123!"
+    ip = f"192.168.{abs(hash(suffix)) % 250 + 1}.{abs(hash(suffix)) % 250 + 1}"
+    req_headers = {"X-Forwarded-For": ip}
 
     reg_res = client.post(
         "/auth/register",
@@ -19,6 +21,7 @@ def _create_and_login_user(suffix: str, full_name: str = "Test User"):
             "full_name": full_name,
             "password": password,
         },
+        headers=req_headers,
     )
     assert reg_res.status_code == 201
     user_id = reg_res.json()["id"]
@@ -26,10 +29,11 @@ def _create_and_login_user(suffix: str, full_name: str = "Test User"):
     login_res = client.post(
         "/auth/login",
         json={"email": email, "password": password},
+        headers=req_headers,
     )
     assert login_res.status_code == 200
     token = login_res.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}", "X-Forwarded-For": ip}
 
     return {
         "id": user_id,
@@ -146,7 +150,8 @@ def test_team_lifecycle_permissions_and_membership():
         headers=member["headers"],
     )
     assert list_res.status_code == 200
-    teams_list = list_res.json()
+    teams_raw = list_res.json()
+    teams_list = teams_raw["items"] if "items" in teams_raw else teams_raw
     assert len(teams_list) == 2
 
     # 8. Batch add team members (member and member2)
@@ -185,22 +190,26 @@ def test_team_lifecycle_permissions_and_membership():
     assert archive_res.json()["is_archived"] is True
 
     # Filter active teams -> should only show Engineering
-    active_list = client.get(
+    active_res = client.get(
         f"/companies/{company_id}/teams?status=active",
         headers=owner["headers"],
     )
-    assert active_list.status_code == 200
-    assert len(active_list.json()) == 1
-    assert active_list.json()[0]["id"] == eng_team_id
+    assert active_res.status_code == 200
+    active_raw = active_res.json()
+    active_list = active_raw["items"] if "items" in active_raw else active_raw
+    assert len(active_list) == 1
+    assert active_list[0]["id"] == eng_team_id
 
     # Filter archived teams -> should show Automation
-    archived_list = client.get(
+    archived_res = client.get(
         f"/companies/{company_id}/teams?status=archived",
         headers=owner["headers"],
     )
-    assert archived_list.status_code == 200
-    assert len(archived_list.json()) == 1
-    assert archived_list.json()[0]["id"] == auto_team_id
+    assert archived_res.status_code == 200
+    archived_raw = archived_res.json()
+    archived_list = archived_raw["items"] if "items" in archived_raw else archived_raw
+    assert len(archived_list) == 1
+    assert archived_list[0]["id"] == auto_team_id
 
     # Restore Team
     restore_res = client.post(
@@ -216,8 +225,10 @@ def test_team_lifecycle_permissions_and_membership():
         headers=member["headers"],
     )
     assert my_teams_res.status_code == 200
-    assert len(my_teams_res.json()) == 1
-    assert my_teams_res.json()[0]["id"] == eng_team_id
+    my_teams_raw = my_teams_res.json()
+    my_teams_list = my_teams_raw["items"] if "items" in my_teams_raw else my_teams_raw
+    assert len(my_teams_list) == 1
+    assert my_teams_list[0]["id"] == eng_team_id
 
     # 12. Check real team activity logs
     activity_res = client.get(
@@ -225,7 +236,8 @@ def test_team_lifecycle_permissions_and_membership():
         headers=member["headers"],
     )
     assert activity_res.status_code == 200
-    activities = activity_res.json()
+    activities_raw = activity_res.json()
+    activities = activities_raw["items"] if "items" in activities_raw else activities_raw
     assert len(activities) >= 3
     actions = [a["action"] for a in activities]
     assert "TEAM_CREATED" in actions

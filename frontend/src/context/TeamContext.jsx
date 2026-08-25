@@ -50,10 +50,11 @@ export const TeamProvider = ({ children }) => {
         const data = await getCompanyTeamsApi(company.id, {
           status: activeStatus,
           my_teams: activeMyTeams,
+          ...params,
         });
-        const safeData = Array.isArray(data) ? data : [];
+        const safeData = Array.isArray(data) ? data : (data?.items || []);
         setTeams(safeData);
-        return safeData;
+        return data;
       } catch (err) {
         console.error('Failed to load teams:', err);
         const msg = err.response?.data?.detail || 'Unable to load workspace teams.';
@@ -95,7 +96,7 @@ export const TeamProvider = ({ children }) => {
 
   // Load team activity log
   const loadTeamActivity = useCallback(
-    async (teamId) => {
+    async (teamId, params = {}) => {
       if (!company?.id || !teamId) {
         setTeamActivities([]);
         return [];
@@ -103,10 +104,10 @@ export const TeamProvider = ({ children }) => {
 
       setActivityLoading(true);
       try {
-        const data = await getTeamActivityApi(company.id, teamId);
-        const safeData = Array.isArray(data) ? data : [];
+        const data = await getTeamActivityApi(company.id, teamId, params);
+        const safeData = Array.isArray(data) ? data : (data?.items || []);
         setTeamActivities(safeData);
-        return safeData;
+        return data;
       } catch (err) {
         console.error('Failed to load team activity:', err);
         setTeamActivities([]);

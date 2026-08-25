@@ -12,6 +12,8 @@ def _create_and_login_user(suffix: str, full_name: str = "Test User"):
     email = f"user_{suffix}@example.com"
     username = f"user_{suffix}"
     password = "SecurePassword123!"
+    ip = f"192.168.{abs(hash(suffix)) % 250 + 1}.{abs(hash(suffix)) % 250 + 1}"
+    req_headers = {"X-Forwarded-For": ip}
 
     reg_res = client.post(
         "/auth/register",
@@ -21,6 +23,7 @@ def _create_and_login_user(suffix: str, full_name: str = "Test User"):
             "full_name": full_name,
             "password": password,
         },
+        headers=req_headers,
     )
     assert reg_res.status_code == 201
     user_id = reg_res.json()["id"]
@@ -28,10 +31,11 @@ def _create_and_login_user(suffix: str, full_name: str = "Test User"):
     login_res = client.post(
         "/auth/login",
         json={"email": email, "password": password},
+        headers=req_headers,
     )
     assert login_res.status_code == 200
     token = login_res.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}", "X-Forwarded-For": ip}
 
     return {"id": user_id, "email": email, "username": username, "full_name": full_name, "headers": headers}
 
@@ -116,8 +120,11 @@ def test_company_multi_membership_and_member_management(mock_send_email):
     # 7. GET /companies/{company_id}/members: Lists all members with safe user summaries
     members_res = client.get(f"/companies/{company_id}/members", headers=member1["headers"])
     assert members_res.status_code == 200
-    members_list = members_res.json()
+    members_data = members_res.json()
+    members_list = members_data["items"] if "items" in members_data else members_data
     assert len(members_list) == 4
+    if "total" in members_data:
+        assert members_data["total"] == 4
     
     # Check user information is included safely
     for m in members_list:
@@ -313,7 +320,8 @@ def test_company_multi_membership_and_member_management(mock_send_email):
     # 23. Verify newly joined member is now in company members list with correct metadata
     new_members_res = client.get(f"/companies/{company_id}/members", headers=invitee_user["headers"])
     assert new_members_res.status_code == 200
-    members_data = new_members_res.json()
+    members_raw = new_members_res.json()
+    members_data = members_raw["items"] if "items" in members_raw else members_raw
     joined_member = next((m for m in members_data if m["user_id"] == invitee_user["id"]), None)
     assert joined_member is not None
     assert joined_member["role"] == "MEMBER"
@@ -327,7 +335,8 @@ def test_company_multi_membership_and_member_management(mock_send_email):
     # 25. GET /companies/{company_id}/invitations - OWNER can view
     owner_invs = client.get(f"/companies/{company_id}/invitations", headers=owner1["headers"])
     assert owner_invs.status_code == 200
-    invs_list = owner_invs.json()
+    invs_raw = owner_invs.json()
+    invs_list = invs_raw["items"] if "items" in invs_raw else invs_raw
     assert len(invs_list) >= 2
     # Ensure no token_hash is exposed
     for inv in invs_list:
@@ -475,7 +484,7 @@ def test_invitation_acceptance_concurrency_race_condition():
     verify_db = SessionLocal()
     try:
         # Exactly one membership exists
-        members = get_company_members(verify_db, company_id)
+        members, _ = get_company_members(verify_db, company_id)
         invitee_members = [m for m in members if m.user_id == invitee_id]
         assert len(invitee_members) == 1
         assert invitee_members[0].designation == "Concurrency Engineer"
@@ -648,7 +657,8 @@ def test_member_lifecycle_removal_and_permissions():
     assert "Member removed from company successfully" in adm_rem_res.json()["message"]
 
     # Verify Member 1 is removed
-    members_list = client.get(f"/companies/{company_id}/members", headers=owner["headers"]).json()
+    res1 = client.get(f"/companies/{company_id}/members", headers=owner["headers"]).json()
+    members_list = res1["items"] if "items" in res1 else res1
     assert not any(m["user_id"] == member1["id"] for m in members_list)
 
     # TEST 1: OWNER removes MEMBER -> 200 Success
@@ -656,7 +666,8 @@ def test_member_lifecycle_removal_and_permissions():
     assert owner_rem_res.status_code == 200
 
     # Verify Member 2 is removed
-    members_list2 = client.get(f"/companies/{company_id}/members", headers=owner["headers"]).json()
+    res2 = client.get(f"/companies/{company_id}/members", headers=owner["headers"]).json()
+    members_list2 = res2["items"] if "items" in res2 else res2
     assert not any(m["user_id"] == member2["id"] for m in members_list2)
 
 
@@ -688,7 +699,8 @@ def test_member_and_admin_leave_company():
     assert "Successfully left the company" in mem_leave.json()["message"]
 
     # Verify Member is gone
-    members_list = client.get(f"/companies/{company_id}/members", headers=owner1["headers"]).json()
+    res_m1 = client.get(f"/companies/{company_id}/members", headers=owner1["headers"]).json()
+    members_list = res_m1["items"] if "items" in res_m1 else res_m1
     assert not any(m["user_id"] == member["id"] for m in members_list)
 
     # TEST 6: ADMIN leaves company -> 200 Success
@@ -696,7 +708,8 @@ def test_member_and_admin_leave_company():
     assert adm_leave.status_code == 200
 
     # Verify Admin is gone
-    members_list2 = client.get(f"/companies/{company_id}/members", headers=owner1["headers"]).json()
+    res_m2 = client.get(f"/companies/{company_id}/members", headers=owner1["headers"]).json()
+    members_list2 = res_m2["items"] if "items" in res_m2 else res_m2
     assert not any(m["user_id"] == admin["id"] for m in members_list2)
 
     # TEST 9: Company has two OWNERS. Owner 1 leaves -> 200 Success. Exactly one OWNER remains.
@@ -704,7 +717,8 @@ def test_member_and_admin_leave_company():
     assert owner1_leave.status_code == 200
 
     # Verify Owner 2 is the only member and only owner
-    members_list3 = client.get(f"/companies/{company_id}/members", headers=owner2["headers"]).json()
+    res_m3 = client.get(f"/companies/{company_id}/members", headers=owner2["headers"]).json()
+    members_list3 = res_m3["items"] if "items" in res_m3 else res_m3
     assert len(members_list3) == 1
     assert members_list3[0]["user_id"] == owner2["id"]
     assert members_list3[0]["role"] == "OWNER"

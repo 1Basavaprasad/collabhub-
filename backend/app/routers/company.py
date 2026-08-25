@@ -1,12 +1,14 @@
 import uuid
 
 # pyrefly: ignore [missing-import]
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.rate_limiter import rate_limit_invitation_verify
+from app.models.company_invitation import InvitationStatus
 from app.models.company_member import CompanyRole
 from app.models.user import User
 
@@ -25,6 +27,7 @@ from app.schemas.company_invitation import (
     CompanyInvitationResponse,
     CompanyInvitationVerifyResponse,
 )
+from app.schemas.pagination import PaginatedResponse
 
 from app.services.company import (
     add_member_to_company_service,
@@ -61,6 +64,12 @@ router = APIRouter(
 @router.get(
     "/invitations/verify/{token}",
     response_model=CompanyInvitationVerifyResponse,
+    dependencies=[Depends(rate_limit_invitation_verify)],
+    responses={
+        429: {
+            "description": "Too many requests. Rate limit exceeded.",
+        }
+    },
 )
 def verify_company_invitation(
     token: str,
@@ -205,17 +214,34 @@ def update_company(
 
 @router.get(
     "/{company_id}/members",
-    response_model=list[CompanyMemberWithUserResponse],
+    response_model=PaginatedResponse[CompanyMemberWithUserResponse],
+    summary="List company members with pagination, role/department filters, and search",
 )
 def get_company_members(
     company_id: uuid.UUID,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
+    role: CompanyRole | None = Query(None, description="Filter by company role"),
+    department: str | None = Query(None, description="Filter by department"),
+    search: str | None = Query(None, description="Search by name, email, username, or designation"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return get_company_members_service(
+    items, total = get_company_members_service(
         db=db,
         company_id=company_id,
         user_id=current_user.id,
+        page=page,
+        limit=limit,
+        role=role,
+        department=department,
+        search=search,
+    )
+    return PaginatedResponse.create(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
     )
 
 
@@ -308,17 +334,32 @@ def leave_company(
 
 @router.get(
     "/{company_id}/invitations",
-    response_model=list[CompanyInvitationResponse],
+    response_model=PaginatedResponse[CompanyInvitationResponse],
+    summary="List company invitations with pagination and status/search filters",
 )
 def get_company_invitations(
     company_id: uuid.UUID,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
+    status: InvitationStatus | None = Query(None, description="Filter by invitation status"),
+    search: str | None = Query(None, description="Search by email, designation, or department"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return get_company_invitations_service(
+    items, total = get_company_invitations_service(
         db=db,
         company_id=company_id,
         requesting_user_id=current_user.id,
+        page=page,
+        limit=limit,
+        status_filter=status,
+        search=search,
+    )
+    return PaginatedResponse.create(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
     )
 
 

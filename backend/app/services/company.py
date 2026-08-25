@@ -87,25 +87,20 @@ def get_company_service(
     company_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> Company:
-    company = get_company_by_id(
-        db,
-        company_id,
-    )
-
-    if not company:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company not found.",
-        )
-
     membership = get_company_membership(db, company_id, user_id)
     if not membership:
+        company = get_company_by_id(db, company_id)
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found.",
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this company.",
         )
 
-    return company
+    return membership.company or get_company_by_id(db, company_id)
 
 
 def update_company_service(
@@ -121,19 +116,26 @@ def update_company_service(
     website: str | None = None,
     logo_url: str | None = None,
 ) -> Company:
-    company = get_company_service(
-        db=db,
-        company_id=company_id,
-        user_id=user_id,
-    )
-
     membership = get_company_membership(db, company_id, user_id)
-    if not membership or membership.role not in (CompanyRole.OWNER, CompanyRole.ADMIN):
+    if not membership:
+        company = get_company_by_id(db, company_id)
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this company.",
+        )
+
+    if membership.role not in (CompanyRole.OWNER, CompanyRole.ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only company owners and admins can update company settings.",
         )
 
+    company = membership.company or get_company_by_id(db, company_id)
     return update_company(
         db=db,
         company=company,
@@ -186,7 +188,12 @@ def get_company_members_service(
     db: Session,
     company_id: uuid.UUID,
     user_id: uuid.UUID,
-) -> list[CompanyMember]:
+    page: int = 1,
+    limit: int = 20,
+    role: CompanyRole | None = None,
+    department: str | None = None,
+    search: str | None = None,
+) -> tuple[list[CompanyMember], int]:
     # User must be a member of the company to view its members
     membership = get_company_membership(db, company_id, user_id)
     if not membership:
@@ -195,7 +202,15 @@ def get_company_members_service(
             detail="You do not have access to this company.",
         )
 
-    return get_company_members(db, company_id)
+    return get_company_members(
+        db=db,
+        company_id=company_id,
+        page=page,
+        limit=limit,
+        role=role,
+        department=department,
+        search=search,
+    )
 
 
 def update_company_member_service(

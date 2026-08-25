@@ -1,11 +1,12 @@
 import uuid
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, contains_eager, joinedload, selectinload
 
 from app.models.team import Team
 from app.models.team_activity import TeamActivity
 from app.models.team_member import TeamMember, TeamRole
+from app.models.user import User
 
 
 def log_team_activity(
@@ -30,18 +31,25 @@ def log_team_activity(
 def get_team_activities(
     db: Session,
     team_id: uuid.UUID,
-    limit: int = 50,
-) -> list[TeamActivity]:
+    page: int = 1,
+    limit: int = 20,
+) -> tuple[list[TeamActivity], int]:
+    base_query = select(TeamActivity).where(TeamActivity.team_id == team_id)
+
+    count_statement = select(func.count()).select_from(base_query.subquery())
+    total = db.execute(count_statement).scalar_one()
+
     statement = (
-        select(TeamActivity)
+        base_query
         .options(
-            joinedload(TeamActivity.actor),
+            selectinload(TeamActivity.actor),
         )
-        .where(TeamActivity.team_id == team_id)
-        .order_by(TeamActivity.created_at.desc())
+        .order_by(TeamActivity.created_at.desc(), TeamActivity.id.desc())
+        .offset((page - 1) * limit)
         .limit(limit)
     )
-    return list(db.execute(statement).scalars().all())
+    items = list(db.execute(statement).scalars().all())
+    return items, total
 
 
 def create_team(
@@ -86,6 +94,15 @@ def create_team(
     return team
 
 
+def get_team_simple(
+    db: Session,
+    team_id: uuid.UUID,
+) -> Team | None:
+    """Lightweight team lookup without loading member relationships."""
+    statement = select(Team).where(Team.id == team_id)
+    return db.execute(statement).scalar_one_or_none()
+
+
 def get_team_by_id(
     db: Session,
     team_id: uuid.UUID,
@@ -93,11 +110,11 @@ def get_team_by_id(
     statement = (
         select(Team)
         .options(
-            joinedload(Team.members).joinedload(TeamMember.user),
+            selectinload(Team.members).selectinload(TeamMember.user),
         )
         .where(Team.id == team_id)
     )
-    return db.execute(statement).unique().scalar_one_or_none()
+    return db.execute(statement).scalar_one_or_none()
 
 
 def get_team_by_company_and_name(
@@ -118,27 +135,61 @@ def get_team_by_company_and_name(
 def get_company_teams(
     db: Session,
     company_id: uuid.UUID,
+    page: int = 1,
+    limit: int = 20,
     status_filter: str | None = None,
     user_id_filter: uuid.UUID | None = None,
-) -> list[Team]:
-    statement = (
-        select(Team)
-        .options(
-            joinedload(Team.members).joinedload(TeamMember.user),
-        )
-        .where(Team.company_id == company_id)
-    )
+    search: str | None = None,
+    sort_by: str | None = None,
+) -> tuple[list[Team], int]:
+    base_query = select(Team).where(Team.company_id == company_id)
 
     if status_filter == "active":
-        statement = statement.where(Team.is_archived.is_(False))
+        base_query = base_query.where(Team.is_archived.is_(False))
     elif status_filter == "archived":
-        statement = statement.where(Team.is_archived.is_(True))
+        base_query = base_query.where(Team.is_archived.is_(True))
 
     if user_id_filter is not None:
-        statement = statement.join(Team.members).where(TeamMember.user_id == user_id_filter)
+        base_query = base_query.join(Team.members).where(TeamMember.user_id == user_id_filter)
 
-    statement = statement.order_by(Team.created_at.asc())
-    return list(db.execute(statement).unique().scalars().all())
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        base_query = base_query.where(
+            or_(
+                Team.name.ilike(term),
+                Team.description.ilike(term),
+            )
+        )
+
+    count_statement = select(func.count()).select_from(base_query.subquery())
+    total = db.execute(count_statement).scalar_one()
+
+    items_statement = (
+        base_query
+        .options(
+            selectinload(Team.members).selectinload(TeamMember.user),
+        )
+    )
+
+    if sort_by == "name":
+        items_statement = items_statement.order_by(func.lower(Team.name).asc(), Team.id.asc())
+    elif sort_by == "recently_created":
+        items_statement = items_statement.order_by(Team.created_at.desc(), Team.id.desc())
+    elif sort_by == "most_members":
+        member_count_subq = (
+            select(func.count(TeamMember.id))
+            .where(TeamMember.team_id == Team.id)
+            .correlate(Team)
+            .scalar_subquery()
+        )
+        items_statement = items_statement.order_by(member_count_subq.desc(), Team.name.asc(), Team.id.asc())
+    else:
+        items_statement = items_statement.order_by(Team.created_at.desc(), Team.id.desc())
+
+    items_statement = items_statement.offset((page - 1) * limit).limit(limit)
+    items = list(db.execute(items_statement).scalars().all())
+
+    return items, total
 
 
 def update_team(
@@ -206,6 +257,48 @@ def get_team_members(
         .order_by(TeamMember.created_at.asc())
     )
     return list(db.execute(statement).scalars().all())
+
+
+def get_team_members_paginated(
+    db: Session,
+    team_id: uuid.UUID,
+    page: int = 1,
+    limit: int = 20,
+    role: TeamRole | None = None,
+    search: str | None = None,
+) -> tuple[list[TeamMember], int]:
+    base_query = (
+        select(TeamMember)
+        .join(User, TeamMember.user_id == User.id)
+        .where(TeamMember.team_id == team_id)
+    )
+
+    if role is not None:
+        base_query = base_query.where(TeamMember.role == role)
+
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        base_query = base_query.where(
+            or_(
+                User.full_name.ilike(term),
+                User.email.ilike(term),
+                User.username.ilike(term),
+            )
+        )
+
+    count_statement = select(func.count()).select_from(base_query.subquery())
+    total = db.execute(count_statement).scalar_one()
+
+    items_statement = (
+        base_query
+        .options(contains_eager(TeamMember.user))
+        .order_by(TeamMember.joined_at.asc(), TeamMember.id.asc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
+    items = list(db.execute(items_statement).scalars().all())
+
+    return items, total
 
 
 def count_team_leads(

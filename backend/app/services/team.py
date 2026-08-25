@@ -21,6 +21,8 @@ from app.repositories.team import (
     get_team_by_id,
     get_team_member,
     get_team_members,
+    get_team_members_paginated,
+    get_team_simple,
     log_team_activity,
     remove_team_member,
     transfer_team_leadership,
@@ -42,21 +44,20 @@ def _get_validated_membership(
     company_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> tuple[Company, CompanyMember]:
-    company = get_company_by_id(db, company_id)
-    if not company:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company workspace not found.",
-        )
-
     membership = get_company_membership(db, company_id, user_id)
     if not membership:
+        company = get_company_by_id(db, company_id)
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company workspace not found.",
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not belong to this company workspace.",
         )
 
-    return company, membership
+    return membership.company or get_company_by_id(db, company_id), membership
 
 
 def _check_team_management_permission(
@@ -115,17 +116,25 @@ def get_company_teams_service(
     db: Session,
     current_user_id: uuid.UUID,
     company_id: uuid.UUID,
+    page: int = 1,
+    limit: int = 20,
     status_filter: str | None = None,
     my_teams: bool = False,
-) -> list[dict]:
+    search: str | None = None,
+    sort_by: str | None = None,
+) -> tuple[list[dict], int]:
     _get_validated_membership(db, company_id, current_user_id)
 
     user_id_filter = current_user_id if my_teams else None
-    teams = get_company_teams(
+    teams, total = get_company_teams(
         db=db,
         company_id=company_id,
+        page=page,
+        limit=limit,
         status_filter=status_filter,
         user_id_filter=user_id_filter,
+        search=search,
+        sort_by=sort_by,
     )
 
     results = []
@@ -149,7 +158,7 @@ def get_company_teams_service(
             "members_preview": members_preview,
         })
 
-    return results
+    return results, total
 
 
 def get_team_service(
@@ -268,7 +277,7 @@ def archive_team_service(
             detail="Only workspace owners and admins can archive teams.",
         )
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -302,7 +311,7 @@ def restore_team_service(
             detail="Only workspace owners and admins can restore teams.",
         )
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -336,7 +345,7 @@ def delete_team_service(
             detail="Only workspace owners and admins can delete teams.",
         )
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -354,7 +363,7 @@ def get_team_members_service(
 ) -> list[TeamMember]:
     _get_validated_membership(db, company_id, current_user_id)
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -373,7 +382,7 @@ def add_team_member_service(
 ) -> TeamMember:
     _, membership = _get_validated_membership(db, company_id, current_user_id)
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -425,7 +434,7 @@ def batch_add_team_members_service(
 ) -> list[TeamMember]:
     _, membership = _get_validated_membership(db, company_id, current_user_id)
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -478,7 +487,7 @@ def transfer_leadership_service(
 ) -> dict:
     _, membership = _get_validated_membership(db, company_id, current_user_id)
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -498,7 +507,7 @@ def transfer_leadership_service(
     current_lead_member = get_team_member(db, team_id, current_user_id)
     if not current_lead_member or current_lead_member.role != TeamRole.LEAD:
         # If admin is transferring, find any current lead
-        leads = [m for m in team.members if m.role == TeamRole.LEAD]
+        leads = [m for m in get_team_members(db, team_id) if m.role == TeamRole.LEAD]
         current_lead_member = leads[0] if leads else None
 
     transfer_team_leadership(
@@ -529,7 +538,7 @@ def update_team_member_service(
 ) -> TeamMember:
     _, membership = _get_validated_membership(db, company_id, current_user_id)
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -580,7 +589,7 @@ def remove_team_member_service(
 ) -> None:
     _, membership = _get_validated_membership(db, company_id, current_user_id)
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -620,19 +629,55 @@ def remove_team_member_service(
     )
 
 
-def get_team_activity_service(
+def get_team_members_service(
     db: Session,
     current_user_id: uuid.UUID,
     company_id: uuid.UUID,
     team_id: uuid.UUID,
-) -> list[TeamActivity]:
+    page: int = 1,
+    limit: int = 20,
+    role: TeamRole | None = None,
+    search: str | None = None,
+) -> tuple[list[TeamMember], int]:
     _get_validated_membership(db, company_id, current_user_id)
 
-    team = get_team_by_id(db, team_id)
+    team = get_team_simple(db, team_id)
     if not team or team.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Team not found in this company workspace.",
         )
 
-    return get_team_activities(db, team_id)
+    return get_team_members_paginated(
+        db=db,
+        team_id=team_id,
+        page=page,
+        limit=limit,
+        role=role,
+        search=search,
+    )
+
+
+def get_team_activity_service(
+    db: Session,
+    current_user_id: uuid.UUID,
+    company_id: uuid.UUID,
+    team_id: uuid.UUID,
+    page: int = 1,
+    limit: int = 20,
+) -> tuple[list[TeamActivity], int]:
+    _get_validated_membership(db, company_id, current_user_id)
+
+    team = get_team_simple(db, team_id)
+    if not team or team.company_id != company_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found in this company workspace.",
+        )
+
+    return get_team_activities(
+        db=db,
+        team_id=team_id,
+        page=page,
+        limit=limit,
+    )

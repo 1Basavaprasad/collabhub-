@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.models.team_member import TeamRole
 from app.models.user import User
+from app.schemas.pagination import PaginatedResponse
 from app.schemas.team import (
     BatchTeamMembersCreate,
     TeamActivityResponse,
@@ -43,23 +45,37 @@ router = APIRouter(
 
 @router.get(
     "",
-    response_model=list[TeamResponse],
+    response_model=PaginatedResponse[TeamResponse],
     status_code=status.HTTP_200_OK,
-    summary="List teams in a workspace with optional filters",
+    summary="List teams in a workspace with pagination and filters",
 )
 def list_teams(
     company_id: uuid.UUID,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
     status: str | None = Query(None, description="Status filter: all, active, archived"),
     my_teams: bool = Query(False, description="Filter to teams user belongs to"),
+    search: str | None = Query(None, description="Search by team name or description"),
+    sort_by: str | None = Query(None, description="Sort by: name, recently_created, most_members"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[dict]:
-    return get_company_teams_service(
+):
+    items, total = get_company_teams_service(
         db=db,
         current_user_id=current_user.id,
         company_id=company_id,
+        page=page,
+        limit=limit,
         status_filter=status,
         my_teams=my_teams,
+        search=search,
+        sort_by=sort_by,
+    )
+    return PaginatedResponse.create(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
     )
 
 
@@ -203,21 +219,35 @@ def delete_team(
 
 @router.get(
     "/{team_id}/members",
-    response_model=list[TeamMemberResponse],
+    response_model=PaginatedResponse[TeamMemberResponse],
     status_code=status.HTTP_200_OK,
-    summary="List all members in a team",
+    summary="List all members in a team with pagination",
 )
 def list_team_members(
     company_id: uuid.UUID,
     team_id: uuid.UUID,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
+    role: TeamRole | None = Query(None, description="Filter by team role"),
+    search: str | None = Query(None, description="Search member name or email"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return get_team_members_service(
+    items, total = get_team_members_service(
         db=db,
         current_user_id=current_user.id,
         company_id=company_id,
         team_id=team_id,
+        page=page,
+        limit=limit,
+        role=role,
+        search=search,
+    )
+    return PaginatedResponse.create(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
     )
 
 
@@ -338,19 +368,29 @@ def remove_team_member(
 
 @router.get(
     "/{team_id}/activity",
-    response_model=list[TeamActivityResponse],
+    response_model=PaginatedResponse[TeamActivityResponse],
     status_code=status.HTTP_200_OK,
-    summary="Get real activity audit log for a team",
+    summary="Get real activity audit log for a team with pagination",
 )
 def get_team_activity(
     company_id: uuid.UUID,
     team_id: uuid.UUID,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return get_team_activity_service(
+    items, total = get_team_activity_service(
         db=db,
         current_user_id=current_user.id,
         company_id=company_id,
         team_id=team_id,
+        page=page,
+        limit=limit,
+    )
+    return PaginatedResponse.create(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
     )

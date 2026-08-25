@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -60,4 +60,8 @@ class TeamActivity(Base):
 
     actor: Mapped["User | None"] = relationship(
         "User",
+    )
+
+    __table_args__ = (
+        Index("ix_team_activities_team_created", "team_id", "created_at", "id"),
     )

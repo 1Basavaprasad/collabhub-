@@ -35,7 +35,7 @@ export const CompanyProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   // Load members for a given company ID
-  const loadCompanyMembers = useCallback(async (targetCompanyId) => {
+  const loadCompanyMembers = useCallback(async (targetCompanyId, params = {}) => {
     if (!targetCompanyId) {
       setMembers([]);
       return [];
@@ -43,10 +43,10 @@ export const CompanyProvider = ({ children }) => {
 
     setMembersLoading(true);
     try {
-      const memberList = await getCompanyMembersApi(targetCompanyId);
-      const safeList = Array.isArray(memberList) ? memberList : [];
+      const memberList = await getCompanyMembersApi(targetCompanyId, params);
+      const safeList = Array.isArray(memberList) ? memberList : (memberList?.items || []);
       setMembers(safeList);
-      return safeList;
+      return memberList;
     } catch (err) {
       console.error('Failed to load company members:', err);
       setMembers([]);
@@ -57,7 +57,7 @@ export const CompanyProvider = ({ children }) => {
   }, []);
 
   // Load invitations for a given company ID (OWNER/ADMIN only)
-  const loadCompanyInvitations = useCallback(async (targetCompanyId) => {
+  const loadCompanyInvitations = useCallback(async (targetCompanyId, params = {}) => {
     if (!targetCompanyId) {
       setInvitations([]);
       setInvitationsError(null);
@@ -67,10 +67,10 @@ export const CompanyProvider = ({ children }) => {
     setInvitationsLoading(true);
     setInvitationsError(null);
     try {
-      const invList = await getCompanyInvitationsApi(targetCompanyId);
-      const safeList = Array.isArray(invList) ? invList : [];
+      const invList = await getCompanyInvitationsApi(targetCompanyId, params);
+      const safeList = Array.isArray(invList) ? invList : (invList?.items || []);
       setInvitations(safeList);
-      return safeList;
+      return invList;
     } catch (err) {
       // 403 Forbidden is expected for MEMBERs
       if (err.response && err.response.status === 403) {
@@ -120,7 +120,7 @@ export const CompanyProvider = ({ children }) => {
         try {
           setMembersLoading(true);
           const memberList = await getCompanyMembersApi(activeData.id);
-          setMembers(Array.isArray(memberList) ? memberList : []);
+          setMembers(Array.isArray(memberList) ? memberList : (memberList?.items || []));
         } catch {
           setMembers([]);
         } finally {
@@ -131,7 +131,7 @@ export const CompanyProvider = ({ children }) => {
           setInvitationsLoading(true);
           setInvitationsError(null);
           const invList = await getCompanyInvitationsApi(activeData.id);
-          setInvitations(Array.isArray(invList) ? invList : []);
+          setInvitations(Array.isArray(invList) ? invList : (invList?.items || []));
         } catch (err) {
           if (err.response && err.response.status === 403) {
             setInvitations([]);

@@ -441,9 +441,13 @@ def get_company_invitations_service(
     db: Session,
     company_id: uuid.UUID,
     requesting_user_id: uuid.UUID,
-) -> list[CompanyInvitation]:
+    page: int = 1,
+    limit: int = 20,
+    status_filter: InvitationStatus | None = None,
+    search: str | None = None,
+) -> tuple[list[CompanyInvitation], int]:
     """
-    Get all invitations for a company.
+    Get paginated invitations for a company.
 
     Only OWNER and ADMIN of the company can access invitations.
     """
@@ -466,15 +470,29 @@ def get_company_invitations_service(
             detail="Only company owners and admins can view invitations.",
         )
 
-    invitations = get_company_invitations(db, company_id)
+    invitations, total = get_company_invitations(
+        db=db,
+        company_id=company_id,
+        page=page,
+        limit=limit,
+        status=status_filter,
+        search=search,
+    )
 
-    # Check and update any expired pending invitations
+    # Check and update any expired pending invitations in a single batch
     now = datetime.now(timezone.utc)
-    for inv in invitations:
-        if inv.status == InvitationStatus.PENDING and inv.expires_at <= now:
-            mark_invitation_expired(db, inv)
+    expired_invs = [
+        inv for inv in invitations
+        if inv.status == InvitationStatus.PENDING and inv.expires_at <= now
+    ]
+    if expired_invs:
+        for inv in expired_invs:
+            inv.status = InvitationStatus.EXPIRED
+        db.commit()
+        for inv in expired_invs:
+            db.refresh(inv)
 
-    return invitations
+    return invitations, total
 
 
 def revoke_company_invitation_service(

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -120,4 +120,9 @@ class CompanyInvitation(Base):
     invited_by_user: Mapped["User"] = relationship(
         "User",
         back_populates="sent_company_invitations",
+    )
+
+    __table_args__ = (
+        Index("ix_company_invitations_company_created", "company_id", "created_at", "id"),
+        Index("ix_company_invitations_company_status", "company_id", "status"),
     )

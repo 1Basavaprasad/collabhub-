@@ -1,18 +1,26 @@
 import api from './axios';
 
 /**
- * Get all teams belonging to a company workspace with optional filters
+ * Get teams belonging to a company workspace with optional pagination and filters
  * @param {string} companyId - UUID of the company
- * @param {Object} params - { status: 'all'|'active'|'archived', my_teams: boolean }
- * @returns {Promise<Array<Object>>} - List of teams
+ * @param {Object} params - { page?, limit?, status?, my_teams?, search?, sort_by? }
+ * @returns {Promise<Object>} - Paginated response with items and metadata
  */
 export const getCompanyTeamsApi = async (companyId, params = {}) => {
   const queryParams = new URLSearchParams();
+  if (params.page) queryParams.append('page', params.page);
+  if (params.limit) queryParams.append('limit', params.limit);
   if (params.status && params.status !== 'all') {
     queryParams.append('status', params.status);
   }
   if (params.my_teams) {
     queryParams.append('my_teams', 'true');
+  }
+  if (params.search?.trim()) {
+    queryParams.append('search', params.search.trim());
+  }
+  if (params.sort_by) {
+    queryParams.append('sort_by', params.sort_by);
   }
   const url = `/companies/${companyId}/teams${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
   const response = await api.get(url);
@@ -101,13 +109,21 @@ export const deleteTeamApi = async (companyId, teamId) => {
 };
 
 /**
- * Get all members in a team
+ * Get members in a team with optional pagination and filters
  * @param {string} companyId - UUID of the company
  * @param {string} teamId - UUID of the team
- * @returns {Promise<Array<Object>>} - List of team members
+ * @param {Object} params - { page?, limit?, role?, search? }
+ * @returns {Promise<Object>} - Paginated response with items and metadata
  */
-export const getTeamMembersApi = async (companyId, teamId) => {
-  const response = await api.get(`/companies/${companyId}/teams/${teamId}/members`);
+export const getTeamMembersApi = async (companyId, teamId, params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.page) queryParams.append('page', params.page);
+  if (params.limit) queryParams.append('limit', params.limit);
+  if (params.role) queryParams.append('role', params.role);
+  if (params.search?.trim()) queryParams.append('search', params.search.trim());
+
+  const url = `/companies/${companyId}/teams/${teamId}/members${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  const response = await api.get(url);
   return response.data;
 };
 
@@ -186,12 +202,18 @@ export const removeTeamMemberApi = async (companyId, teamId, userId) => {
 };
 
 /**
- * Get activity audit log for a team
+ * Get activity audit log for a team with optional pagination
  * @param {string} companyId - UUID of the company
  * @param {string} teamId - UUID of the team
- * @returns {Promise<Array<Object>>} - List of activity log events
+ * @param {Object} params - { page?, limit? }
+ * @returns {Promise<Object>} - Paginated response with items and metadata
  */
-export const getTeamActivityApi = async (companyId, teamId) => {
-  const response = await api.get(`/companies/${companyId}/teams/${teamId}/activity`);
+export const getTeamActivityApi = async (companyId, teamId, params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.page) queryParams.append('page', params.page);
+  if (params.limit) queryParams.append('limit', params.limit);
+
+  const url = `/companies/${companyId}/teams/${teamId}/activity${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  const response = await api.get(url);
   return response.data;
 };

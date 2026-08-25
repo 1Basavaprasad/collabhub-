@@ -79,12 +79,21 @@ export const updateCompanyApi = async (companyId, data) => {
 };
 
 /**
- * Get all members of a company (including user details, role, designation, department)
+ * Get members of a company with optional pagination and filters
  * @param {string} companyId - UUID of the company
- * @returns {Promise<Array<Object>>} - List of company members with user summaries
+ * @param {Object} params - { page?, limit?, role?, department?, search? }
+ * @returns {Promise<Object>} - Paginated response with items and metadata
  */
-export const getCompanyMembersApi = async (companyId) => {
-  const response = await api.get(`/companies/${companyId}/members`);
+export const getCompanyMembersApi = async (companyId, params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.page) queryParams.append('page', params.page);
+  if (params.limit) queryParams.append('limit', params.limit);
+  if (params.role) queryParams.append('role', params.role);
+  if (params.department?.trim()) queryParams.append('department', params.department.trim());
+  if (params.search?.trim()) queryParams.append('search', params.search.trim());
+
+  const url = `/companies/${companyId}/members${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  const response = await api.get(url);
   return response.data;
 };
 
@@ -147,12 +156,20 @@ export const createCompanyInvitationApi = async (
 };
 
 /**
- * Get all company invitations (OWNER/ADMIN only)
+ * Get company invitations with optional pagination and filters (OWNER/ADMIN only)
  * @param {string} companyId - UUID of the company
- * @returns {Promise<Array<Object>>} - List of company invitations
+ * @param {Object} params - { page?, limit?, status?, search? }
+ * @returns {Promise<Object>} - Paginated response with items and metadata
  */
-export const getCompanyInvitationsApi = async (companyId) => {
-  const response = await api.get(`/companies/${companyId}/invitations`);
+export const getCompanyInvitationsApi = async (companyId, params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.page) queryParams.append('page', params.page);
+  if (params.limit) queryParams.append('limit', params.limit);
+  if (params.status && params.status !== 'all') queryParams.append('status', params.status);
+  if (params.search?.trim()) queryParams.append('search', params.search.trim());
+
+  const url = `/companies/${companyId}/invitations${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  const response = await api.get(url);
   return response.data;
 };
 

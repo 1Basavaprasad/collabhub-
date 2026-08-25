@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -79,4 +79,6 @@ class TeamMember(Base):
 
     __table_args__ = (
         UniqueConstraint("team_id", "user_id", name="uq_team_members_team_user"),
+        Index("ix_team_members_team_joined", "team_id", "joined_at", "id"),
+        Index("ix_team_members_team_role", "team_id", "role"),
     )
