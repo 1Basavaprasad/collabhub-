@@ -224,3 +224,13 @@ export const leaveCompanyApi = async (companyId) => {
   const response = await api.post(`/companies/${companyId}/leave`);
   return response.data;
 };
+
+/**
+ * Delete a company workspace (OWNER only)
+ * @param {string} companyId - UUID of the company
+ * @returns {Promise<Object>} - Confirmation message
+ */
+export const deleteCompanyApi = async (companyId) => {
+  const response = await api.delete(`/companies/${companyId}`);
+  return response.data;
+};

@@ -17,6 +17,7 @@ import {
   acceptCompanyInvitationApi,
   removeCompanyMemberApi,
   leaveCompanyApi,
+  deleteCompanyApi,
 } from '../api/companyApi';
 
 const CompanyContext = createContext(null);
@@ -393,6 +394,45 @@ export const CompanyProvider = ({ children }) => {
     }
   };
 
+  // Delete company as OWNER
+  const deleteCompany = async (targetCompanyId) => {
+    const idToDelete = targetCompanyId || company?.id;
+    if (!idToDelete) {
+      throw new Error('No company to delete.');
+    }
+
+    setError(null);
+    try {
+      const result = await deleteCompanyApi(idToDelete);
+      // Remove deleted company from local companies list
+      const remainingCompanies = companies.filter((c) => c.id !== idToDelete);
+      setCompanies(remainingCompanies);
+
+      // If active company was deleted, switch to next available or null
+      if (company?.id === idToDelete) {
+        if (remainingCompanies.length > 0) {
+          const nextCompany = remainingCompanies[0];
+          setCompany(nextCompany);
+          await loadCompanyMembers(nextCompany.id);
+          await loadCompanyInvitations(nextCompany.id);
+        } else {
+          setCompany(null);
+          setMembers([]);
+          setInvitations([]);
+          setInvitationsError(null);
+        }
+      }
+      return result;
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.detail ||
+        err.message ||
+        'Failed to delete company.';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
   // Select an active company from user's companies list
   const selectCompany = async (selectedCompany) => {
     if (selectedCompany && selectedCompany.id) {
@@ -458,6 +498,7 @@ export const CompanyProvider = ({ children }) => {
     loadCompanyInvitations,
     createCompany,
     updateCompany,
+    deleteCompany,
     sendCompanyInvitation,
     revokeInvitation,
     verifyInvitation,

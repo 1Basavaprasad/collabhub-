@@ -1,10 +1,12 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.company import Company
+from app.models.company_invitation import CompanyInvitation, InvitationStatus
 from app.models.company_member import CompanyMember, CompanyRole
 from app.models.team import Team
 from app.models.team_activity import TeamActivity
@@ -21,6 +23,7 @@ from app.repositories.company import (
     get_company_membership_for_update,
     lock_company_for_update,
     remove_company_member,
+    soft_delete_company,
     update_company,
     update_company_member,
 )
@@ -197,6 +200,12 @@ def get_company_members_service(
     # User must be a member of the company to view its members
     membership = get_company_membership(db, company_id, user_id)
     if not membership:
+        company = get_company_by_id(db, company_id)
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found.",
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this company.",
@@ -463,4 +472,68 @@ def leave_company_service(
         "message": "Successfully left the company.",
         "company_id": str(company_id),
         "user_id": str(user_id),
+    }
+
+
+def delete_company_service(
+    db: Session,
+    company_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> dict:
+    """
+    Soft-delete a company workspace (OWNER only).
+    Atomic transaction:
+      1. Locks company row with FOR UPDATE.
+      2. Validates company exists and is not already deleted (404).
+      3. Validates user is an OWNER of the company (403 if ADMIN/MEMBER).
+      4. Marks company as deleted (is_deleted=True, deleted_at=now).
+      5. Revokes all pending invitations for this company.
+      6. Commits transaction atomically.
+    Users and historical memberships/teams remain intact.
+    """
+    # 1. Lock company row (only active companies)
+    company = lock_company_for_update(db, company_id)
+    if not company or company.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found.",
+        )
+
+    # 2. Check user membership & permissions
+    membership = get_company_membership(db, company_id, user_id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not belong to this company workspace.",
+        )
+
+    if membership.role != CompanyRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company owners can delete the company workspace.",
+        )
+
+    # 3. Soft delete company
+    now = datetime.now(timezone.utc)
+    company.is_deleted = True
+    company.deleted_at = now
+
+    # 4. Invalidate / revoke pending invitations
+    pending_invitations = list(
+        db.execute(
+            select(CompanyInvitation).where(
+                CompanyInvitation.company_id == company_id,
+                CompanyInvitation.status == InvitationStatus.PENDING,
+            )
+        ).scalars().all()
+    )
+    for inv in pending_invitations:
+        inv.status = InvitationStatus.REVOKED
+
+    # 5. Commit atomically
+    db.commit()
+
+    return {
+        "message": "Company deleted successfully.",
+        "company_id": str(company_id),
     }

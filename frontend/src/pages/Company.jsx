@@ -96,6 +96,7 @@ const Company = () => {
     fetchCompany,
     createCompany,
     updateCompany,
+    deleteCompany,
     sendCompanyInvitation,
     revokeInvitation,
     loadCompanyInvitations,
@@ -124,6 +125,9 @@ const Company = () => {
   const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
   const [isRevokeModalOpen, setIsRevokeModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmationName, setDeleteConfirmationName] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form states
   const [createForm, setCreateForm] = useState({
@@ -477,6 +481,27 @@ const Company = () => {
       addToast(err.message || 'Failed to revoke invitation', 'error');
     } finally {
       setRevokeLoading(false);
+    }
+  };
+
+  // Submit Company Workspace Deletion (Owner only)
+  const handleDeleteCompany = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (deleteConfirmationName.trim() !== (company?.name || '').trim()) {
+      addToast('Please enter the exact workspace name to confirm deletion.', 'error');
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await deleteCompany(company.id);
+      addToast(`Workspace "${company.name}" has been deleted.`, 'success');
+      setIsDeleteModalOpen(false);
+      setDeleteConfirmationName('');
+    } catch (err) {
+      addToast(err.message || 'Failed to delete workspace.', 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1140,6 +1165,45 @@ const Company = () => {
                       </div>
 
                     </div>
+
+                    {/* Danger Zone: Workspace Deletion (Owner only) */}
+                    {isOwner && (
+                      <div className="pt-2">
+                        <Card className="border-rose-200/80 dark:border-rose-900/40 bg-rose-50/20 dark:bg-rose-950/10">
+                          <CardHeader>
+                            <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                              <AlertTriangle className="h-4 w-4" />
+                              <CardTitle className="text-sm text-rose-700 dark:text-rose-400">Danger Zone</CardTitle>
+                            </div>
+                            <CardDescription>
+                              Sensitive and irreversible workspace actions.
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-0">
+                            <div>
+                              <h4 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                                Delete Workspace
+                              </h4>
+                              <p className="text-xs text-slate-500 dark:text-[#94A3B8] mt-0.5">
+                                Remove this workspace from your active account and revoke all pending invitations.
+                              </p>
+                            </div>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              icon={Trash2}
+                              onClick={() => {
+                                setDeleteConfirmationName('');
+                                setIsDeleteModalOpen(true);
+                              }}
+                              className="shrink-0 text-xs"
+                            >
+                              Delete Workspace
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2262,6 +2326,74 @@ const Company = () => {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* ======================================================== */}
+      {/* MODAL 6: DELETE WORKSPACE CONFIRMATION MODAL            */}
+      {/* ======================================================== */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          if (!isDeleting) {
+            setIsDeleteModalOpen(false);
+            setDeleteConfirmationName('');
+          }
+        }}
+        title="Delete Workspace"
+        description="Permanently remove this workspace from your active account."
+        size="md"
+        footer={
+          <div className="flex items-center justify-end gap-2.5">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setDeleteConfirmationName('');
+              }}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              icon={Trash2}
+              onClick={handleDeleteCompany}
+              disabled={isDeleting || deleteConfirmationName.trim() !== (company?.name || '').trim()}
+            >
+              {isDeleting ? 'Deleting company...' : 'Delete Company'}
+            </Button>
+          </div>
+        }
+      >
+        <form onSubmit={handleDeleteCompany} className="space-y-4">
+          <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-xs text-rose-800 dark:text-rose-200 space-y-1.5">
+            <div className="flex items-center gap-1.5 font-semibold text-rose-900 dark:text-rose-100">
+              <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+              <span>Warning: This will deactivate this workspace.</span>
+            </div>
+            <p className="leading-relaxed">
+              This will remove <strong className="font-semibold text-rose-950 dark:text-rose-100">{company?.name}</strong> from your active workspaces and immediately revoke all pending invitations.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-slate-700 dark:text-[#CBD5E1]">
+              Type <strong className="font-mono text-slate-900 dark:text-white select-all">{company?.name}</strong> to confirm:
+            </label>
+            <Input
+              type="text"
+              value={deleteConfirmationName}
+              onChange={(e) => setDeleteConfirmationName(e.target.value)}
+              placeholder={company?.name}
+              disabled={isDeleting}
+              autoFocus
+            />
+          </div>
+        </form>
       </Modal>
 
     </div>

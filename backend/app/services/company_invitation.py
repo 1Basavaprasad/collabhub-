@@ -459,6 +459,12 @@ def get_company_invitations_service(
     )
 
     if not membership:
+        company = get_company_by_id(db, company_id)
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found.",
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this company.",

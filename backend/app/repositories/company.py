@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, contains_eager, joinedload
@@ -54,10 +55,13 @@ def create_company(
 def get_company_by_id(
     db: Session,
     company_id: uuid.UUID,
+    include_deleted: bool = False,
 ) -> Company | None:
     statement = select(Company).where(
         Company.id == company_id
     )
+    if not include_deleted:
+        statement = statement.where(Company.is_deleted.is_(False))
 
     return db.execute(statement).scalar_one_or_none()
 
@@ -65,12 +69,15 @@ def get_company_by_id(
 def lock_company_for_update(
     db: Session,
     company_id: uuid.UUID,
+    include_deleted: bool = False,
 ) -> Company | None:
     statement = (
         select(Company)
         .where(Company.id == company_id)
-        .with_for_update()
     )
+    if not include_deleted:
+        statement = statement.where(Company.is_deleted.is_(False))
+    statement = statement.with_for_update()
     return db.execute(statement).scalar_one_or_none()
 
 
@@ -78,13 +85,22 @@ def get_company_membership(
     db: Session,
     company_id: uuid.UUID,
     user_id: uuid.UUID,
+    include_deleted_company: bool = False,
 ) -> CompanyMember | None:
-    statement = select(CompanyMember).options(
-        joinedload(CompanyMember.user)
-    ).where(
-        CompanyMember.company_id == company_id,
-        CompanyMember.user_id == user_id,
+    statement = (
+        select(CompanyMember)
+        .join(Company, CompanyMember.company_id == Company.id)
+        .options(
+            joinedload(CompanyMember.user),
+            joinedload(CompanyMember.company),
+        )
+        .where(
+            CompanyMember.company_id == company_id,
+            CompanyMember.user_id == user_id,
+        )
     )
+    if not include_deleted_company:
+        statement = statement.where(Company.is_deleted.is_(False))
 
     return db.execute(statement).scalar_one_or_none()
 
@@ -96,7 +112,10 @@ def get_companies_for_user(
     statement = (
         select(Company)
         .join(CompanyMember, Company.id == CompanyMember.company_id)
-        .where(CompanyMember.user_id == user_id)
+        .where(
+            CompanyMember.user_id == user_id,
+            Company.is_deleted.is_(False),
+        )
         .order_by(CompanyMember.joined_at.asc())
     )
 
@@ -110,12 +129,26 @@ def get_active_or_first_company_for_user(
     statement = (
         select(Company)
         .join(CompanyMember, Company.id == CompanyMember.company_id)
-        .where(CompanyMember.user_id == user_id)
+        .where(
+            CompanyMember.user_id == user_id,
+            Company.is_deleted.is_(False),
+        )
         .order_by(CompanyMember.joined_at.asc())
         .limit(1)
     )
 
     return db.execute(statement).scalar_one_or_none()
+
+
+def soft_delete_company(
+    db: Session,
+    company: Company,
+) -> Company:
+    company.is_deleted = True
+    company.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(company)
+    return company
 
 
 def add_company_member(

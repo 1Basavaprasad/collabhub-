@@ -32,6 +32,7 @@ from app.schemas.pagination import PaginatedResponse
 from app.services.company import (
     add_member_to_company_service,
     create_company_service,
+    delete_company_service,
     get_company_members_service,
     get_company_service,
     get_my_companies_list,
@@ -205,6 +206,23 @@ def update_company(
         city=data.city,
         website=data.website,
         logo_url=data.logo_url,
+    )
+
+
+@router.delete(
+    "/{company_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete a company workspace (OWNER only)",
+)
+def delete_company(
+    company_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return delete_company_service(
+        db=db,
+        company_id=company_id,
+        user_id=current_user.id,
     )
 
 

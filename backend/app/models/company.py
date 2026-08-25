@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import Boolean, DateTime, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,6 +64,18 @@ class Company(Base):
         nullable=True,
     )
 
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+    )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     memberships: Mapped[list["CompanyMember"]] = relationship(
         "CompanyMember",
         back_populates="company",
@@ -95,4 +107,8 @@ class Company(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_companies_is_deleted_created_at", "is_deleted", "created_at"),
     )

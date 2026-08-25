@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     # Direct database URL override (optional)
     DATABASE_URL: Optional[str] = None
 
+    # Database Connection Pool Settings
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800  # 30 minutes
+    DB_POOL_PRE_PING: bool = True
+
     # Resend Email Settings (Optional / Legacy)
     EMAIL_API_KEY: Optional[str] = None
     EMAIL_FROM: Optional[str] = None
@@ -95,6 +102,39 @@ class Settings(BaseSettings):
 
     RATE_LIMIT_INVITATION_VERIFY_MAX_REQUESTS: int = 20
     RATE_LIMIT_INVITATION_VERIFY_WINDOW_SECONDS: int = 60  # 20 verifications / minute
+
+    @field_validator("DB_POOL_SIZE", "DB_POOL_TIMEOUT", mode="before")
+    @classmethod
+    def validate_positive_int(cls, v: Any) -> int:
+        try:
+            val = int(v)
+        except (ValueError, TypeError):
+            raise ValueError("Must be a valid integer.")
+        if val < 1:
+            raise ValueError("Must be a positive integer greater than or equal to 1.")
+        return val
+
+    @field_validator("DB_MAX_OVERFLOW", mode="before")
+    @classmethod
+    def validate_non_negative_int(cls, v: Any) -> int:
+        try:
+            val = int(v)
+        except (ValueError, TypeError):
+            raise ValueError("Must be a valid integer.")
+        if val < 0:
+            raise ValueError("Must be a non-negative integer greater than or equal to 0.")
+        return val
+
+    @field_validator("DB_POOL_RECYCLE", mode="before")
+    @classmethod
+    def validate_pool_recycle(cls, v: Any) -> int:
+        try:
+            val = int(v)
+        except (ValueError, TypeError):
+            raise ValueError("Must be a valid integer.")
+        if val < -1 or val == 0:
+            raise ValueError("Must be -1 or a positive integer greater than or equal to 1.")
+        return val
 
     @field_validator("CORS_ALLOWED_ORIGINS", mode="before")
     @classmethod
