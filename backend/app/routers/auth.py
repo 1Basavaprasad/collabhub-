@@ -93,11 +93,10 @@ def forgot_password_request(
     data: ForgotPasswordRequest,
     db: Session = Depends(get_db),
 ):
-    reset_token = forgot_password(db, data.email)
+    forgot_password(db, data.email)
 
     return {
-        "message": "If the email is registered, a password reset token has been generated",
-        "reset_token": reset_token,
+        "message": "If an account exists for this email, a password reset link has been sent.",
     }
 
 

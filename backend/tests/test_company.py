@@ -379,3 +379,209 @@ def test_company_multi_membership_and_member_management(mock_send_email):
     assert repeat_revoke.status_code == 400
     assert "already been revoked" in repeat_revoke.json()["detail"]
 
+
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from fastapi import HTTPException
+from app.models.company_invitation import InvitationStatus
+from app.repositories.company import get_company_members
+from app.repositories.company_invitation import create_invitation, get_invitation_by_token_hash
+from app.services.company_invitation import (
+    accept_company_invitation_service,
+    _hash_invitation_token,
+)
+from app.core.database import SessionLocal
+from datetime import datetime, timezone, timedelta
+import secrets
+
+
+def test_invitation_acceptance_concurrency_race_condition():
+    """
+    Test true concurrent invitation acceptance requests with multithreading.
+    Row-level locking (SELECT ... FOR UPDATE) ensures only one request succeeds,
+    while the concurrent request is blocked and then cleanly rejected once the first commits.
+    """
+    suffix = uuid.uuid4().hex[:8]
+    owner = _create_and_login_user(f"c_own_{suffix}", "Concurrency Owner")
+    invitee = _create_and_login_user(f"c_inv_{suffix}", "Concurrency Invitee")
+
+    # 1. Create company
+    create_res = client.post(
+        "/companies",
+        headers=owner["headers"],
+        json={"name": f"Concurrent Corp {suffix}"},
+    )
+    assert create_res.status_code == 201
+    company_id = uuid.UUID(create_res.json()["id"])
+    invitee_id = uuid.UUID(invitee["id"])
+
+    # 2. Create invitation in database
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = _hash_invitation_token(raw_token)
+    db = SessionLocal()
+    try:
+        create_invitation(
+            db=db,
+            company_id=company_id,
+            email=invitee["email"],
+            role="MEMBER",
+            token_hash=token_hash,
+            invited_by=uuid.UUID(owner["id"]),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+            designation="Concurrency Engineer",
+            department="Core Platform",
+        )
+    finally:
+        db.close()
+
+    # 3. Simulate two truly concurrent acceptance attempts using threads and a Barrier
+    barrier = Barrier(2)
+    results = []
+
+    def concurrent_accept_worker():
+        thread_db = SessionLocal()
+        try:
+            # Synchronize both threads so they hit the database query simultaneously
+            barrier.wait()
+            accepted_inv = accept_company_invitation_service(
+                db=thread_db,
+                raw_token=raw_token,
+                user_id=invitee_id,
+            )
+            return {"status": "success", "result": accepted_inv}
+        except HTTPException as exc:
+            return {"status": "http_error", "status_code": exc.status_code, "detail": exc.detail}
+        except Exception as exc:
+            return {"status": "error", "exception": str(exc)}
+        finally:
+            thread_db.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(concurrent_accept_worker)
+        f2 = executor.submit(concurrent_accept_worker)
+        results = [f1.result(), f2.result()]
+
+    # 4. Verify outcomes: Exactly one succeeded, exactly one was rejected with 400
+    successes = [r for r in results if r["status"] == "success"]
+    rejections = [r for r in results if r["status"] == "http_error"]
+    errors = [r for r in results if r["status"] == "error"]
+
+    assert len(errors) == 0, f"Unexpected unhandled errors occurred: {errors}"
+    assert len(successes) == 1, f"Expected exactly 1 success, got {len(successes)}: {results}"
+    assert len(rejections) == 1, f"Expected exactly 1 rejection, got {len(rejections)}: {results}"
+    assert rejections[0]["status_code"] in (400, 404)
+
+    # 5. Verify database integrity
+    verify_db = SessionLocal()
+    try:
+        # Exactly one membership exists
+        members = get_company_members(verify_db, company_id)
+        invitee_members = [m for m in members if m.user_id == invitee_id]
+        assert len(invitee_members) == 1
+        assert invitee_members[0].designation == "Concurrency Engineer"
+
+        # Invitation is marked ACCEPTED exactly once
+        inv = get_invitation_by_token_hash(verify_db, token_hash)
+        assert inv is not None
+        assert inv.status == InvitationStatus.ACCEPTED
+        assert inv.accepted_at is not None
+    finally:
+        verify_db.close()
+
+
+def test_invitation_state_transitions_and_validations():
+    """
+    Test that once an invitation transitions to ACCEPTED, REVOKED, or EXPIRED,
+    it cannot be accepted again.
+    """
+    suffix = uuid.uuid4().hex[:8]
+    owner = _create_and_login_user(f"st_own_{suffix}", "State Owner")
+    invitee = _create_and_login_user(f"st_inv_{suffix}", "State Invitee")
+
+    create_res = client.post(
+        "/companies",
+        headers=owner["headers"],
+        json={"name": f"State Corp {suffix}"},
+    )
+    assert create_res.status_code == 201
+    company_id = uuid.UUID(create_res.json()["id"])
+    invitee_id = uuid.UUID(invitee["id"])
+
+    # 1. Expired invitation rejection (410 Gone)
+    expired_token = secrets.token_urlsafe(32)
+    expired_hash = _hash_invitation_token(expired_token)
+    db = SessionLocal()
+    try:
+        create_invitation(
+            db=db,
+            company_id=company_id,
+            email=invitee["email"],
+            role="MEMBER",
+            token_hash=expired_hash,
+            invited_by=uuid.UUID(owner["id"]),
+            expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        )
+    finally:
+        db.close()
+
+    expired_accept = client.post(
+        f"/companies/invitations/accept/{expired_token}",
+        headers=invitee["headers"],
+    )
+    assert expired_accept.status_code == 410
+    assert "expired" in expired_accept.json()["detail"]
+
+    # 2. Revoked invitation rejection (400 Bad Request)
+    revoked_token = secrets.token_urlsafe(32)
+    revoked_hash = _hash_invitation_token(revoked_token)
+    db = SessionLocal()
+    try:
+        inv = create_invitation(
+            db=db,
+            company_id=company_id,
+            email=invitee["email"],
+            role="MEMBER",
+            token_hash=revoked_hash,
+            invited_by=uuid.UUID(owner["id"]),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        )
+        inv.status = InvitationStatus.REVOKED
+        db.commit()
+    finally:
+        db.close()
+
+    revoked_accept = client.post(
+        f"/companies/invitations/accept/{revoked_token}",
+        headers=invitee["headers"],
+    )
+    assert revoked_accept.status_code == 400
+    assert "revoked" in revoked_accept.json()["detail"]
+
+    # 3. Already accepted invitation rejection (400 Bad Request)
+    accepted_token = secrets.token_urlsafe(32)
+    accepted_hash = _hash_invitation_token(accepted_token)
+    db = SessionLocal()
+    try:
+        inv2 = create_invitation(
+            db=db,
+            company_id=company_id,
+            email=invitee["email"],
+            role="MEMBER",
+            token_hash=accepted_hash,
+            invited_by=uuid.UUID(owner["id"]),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        )
+        inv2.status = InvitationStatus.ACCEPTED
+        inv2.accepted_at = datetime.now(timezone.utc)
+        db.commit()
+    finally:
+        db.close()
+
+    accepted_again = client.post(
+        f"/companies/invitations/accept/{accepted_token}",
+        headers=invitee["headers"],
+    )
+    assert accepted_again.status_code == 400
+    assert "already been accepted" in accepted_again.json()["detail"]
+
+

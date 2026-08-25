@@ -62,7 +62,7 @@ def login_user(db: Session, data: LoginRequest) -> User:
     return user
 
 
-def forgot_password(db: Session, email: str) -> str | None:
+def forgot_password(db: Session, email: str) -> None:
     user = get_user_by_email(db, email)
 
     if not user:
@@ -86,15 +86,7 @@ def forgot_password(db: Session, email: str) -> str | None:
     )
 
     # Create the reset link
-    reset_link = (
-    f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
-)
-
-    # DEBUG: confirm that we reached the email function
-    print(
-        "DEBUG 1: About to call send_password_reset_email",
-        flush=True,
-    )
+    reset_link = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
 
     # Send reset email
     send_password_reset_email(
@@ -102,15 +94,7 @@ def forgot_password(db: Session, email: str) -> str | None:
         reset_link=reset_link,
     )
 
-    # DEBUG: confirm that the email function completed
-    print(
-        "DEBUG 2: Email function finished",
-        flush=True,
-    )
-
-    # Keep returning the token for development/testing.
-    # Later, remove this from the API response.
-    return raw_token
+    return None
 
 
 def reset_password(

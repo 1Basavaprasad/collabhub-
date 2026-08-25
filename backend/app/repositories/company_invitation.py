@@ -52,6 +52,19 @@ def get_invitation_by_token_hash(
     )
 
 
+def get_invitation_by_token_hash_for_update(
+    db: Session,
+    token_hash: str,
+) -> CompanyInvitation | None:
+    return db.scalar(
+        select(CompanyInvitation)
+        .where(
+            CompanyInvitation.token_hash == token_hash
+        )
+        .with_for_update()
+    )
+
+
 def get_pending_invitation_by_token_hash(
     db: Session,
     token_hash: str,

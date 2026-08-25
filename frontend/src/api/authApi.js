@@ -38,9 +38,9 @@ export const getMeApi = async () => {
 };
 
 /**
- * Request password reset email / token
+ * Request password reset email
  * @param {Object} data - { email }
- * @returns {Promise<Object>} - { message, reset_token }
+ * @returns {Promise<Object>} - { message }
  */
 export const forgotPasswordApi = async ({ email }) => {
   const response = await api.post('/auth/forgot-password', {

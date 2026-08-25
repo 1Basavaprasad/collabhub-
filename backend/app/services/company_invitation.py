@@ -4,11 +4,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.company_invitation import CompanyInvitation, InvitationStatus
-from app.models.company_member import CompanyRole
+from app.models.company_member import CompanyMember, CompanyRole
 from app.repositories.company import (
     add_company_member,
     get_company_by_id,
@@ -18,6 +19,7 @@ from app.repositories.company_invitation import (
     create_invitation,
     get_company_invitations,
     get_invitation_by_id,
+    get_invitation_by_token_hash_for_update,
     get_pending_invitation,
     get_pending_invitation_by_token_hash,
     mark_invitation_accepted,
@@ -259,9 +261,10 @@ def accept_company_invitation_service(
     user_id: uuid.UUID,
 ) -> CompanyInvitation:
     """
-    Accept an invitation for the currently authenticated user.
+    Accept an invitation for the currently authenticated user with row-level locking.
 
     The invitation email must match the authenticated user's email.
+    Concurrently safe against duplicate acceptance attempts using PostgreSQL FOR UPDATE lock.
     """
 
     if not raw_token or not raw_token.strip():
@@ -275,8 +278,8 @@ def accept_company_invitation_service(
         raw_token.strip()
     )
 
-    # 2. Find pending invitation
-    invitation = get_pending_invitation_by_token_hash(
+    # 2. Acquire row-level lock on the invitation record for the entire critical section
+    invitation = get_invitation_by_token_hash_for_update(
         db,
         token_hash,
     )
@@ -284,12 +287,36 @@ def accept_company_invitation_service(
     if not invitation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invitation not found or is no longer pending.",
+            detail="Invitation not found.",
         )
 
-    # 3. Check expiration
-    now = datetime.now(timezone.utc)
+    # 3. Check invitation state while holding the row lock
+    if invitation.status == InvitationStatus.ACCEPTED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation has already been accepted.",
+        )
 
+    if invitation.status == InvitationStatus.REVOKED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation has been revoked.",
+        )
+
+    if invitation.status == InvitationStatus.EXPIRED:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="This invitation has expired.",
+        )
+
+    if invitation.status != InvitationStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation is no longer pending.",
+        )
+
+    # 4. Check expiration timestamp
+    now = datetime.now(timezone.utc)
     if invitation.expires_at <= now:
         mark_invitation_expired(
             db,
@@ -301,7 +328,7 @@ def accept_company_invitation_service(
             detail="This invitation has expired.",
         )
 
-    # 4. Get authenticated user
+    # 5. Get authenticated user
     user = get_user_by_id(
         db,
         user_id,
@@ -313,14 +340,14 @@ def accept_company_invitation_service(
             detail="User not found.",
         )
 
-    # 5. Verify invitation belongs to authenticated email
+    # 6. Verify invitation belongs to authenticated email
     if user.email.strip().lower() != invitation.email.strip().lower():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This invitation was sent to a different email address.",
         )
 
-    # 6. Make sure user isn't already a member
+    # 7. Make sure user isn't already a member
     existing_membership = get_company_membership(
         db,
         invitation.company_id,
@@ -333,7 +360,7 @@ def accept_company_invitation_service(
             detail="You are already a member of this company.",
         )
 
-    # 7. Make sure company still exists
+    # 8. Make sure company still exists
     company = get_company_by_id(
         db,
         invitation.company_id,
@@ -345,29 +372,34 @@ def accept_company_invitation_service(
             detail="Company associated with this invitation no longer exists.",
         )
 
-    # 8. Create company membership
+    # 9. Atomically create company membership and mark invitation as accepted in the same transaction
     try:
-        add_company_member(
-            db=db,
+        membership = CompanyMember(
             company_id=invitation.company_id,
             user_id=user.id,
             role=invitation.role,
             designation=invitation.designation,
             department=invitation.department,
         )
+        db.add(membership)
 
+        invitation.status = InvitationStatus.ACCEPTED
+        invitation.accepted_at = now
+
+        db.commit()
+        db.refresh(invitation)
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You are already a member of this company.",
+        )
     except Exception:
         db.rollback()
         raise
 
-    # 9. Mark invitation as accepted
-    accepted_invitation = mark_invitation_accepted(
-        db=db,
-        invitation=invitation,
-        accepted_at=now,
-    )
-
-    return accepted_invitation
+    return invitation
 
 
 def get_company_invitations_service(
