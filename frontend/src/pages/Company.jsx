@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
 import { useToast } from '../components/Toast';
@@ -41,6 +41,9 @@ import {
   Eye,
   Send,
   Sparkles,
+  Clock,
+  Ban,
+  MoreVertical,
 } from 'lucide-react';
 
 const INDUSTRY_OPTIONS = [
@@ -76,6 +79,8 @@ const Company = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const mainScrollRef = useRef(null);
 
   const {
     company,
@@ -108,10 +113,23 @@ const Company = () => {
   const currentValidTab = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'overview';
   const [activeTab, setActiveTab] = useState(currentValidTab);
 
-  // Synchronize activeTab whenever searchParams changes
+  // Synchronize activeTab whenever searchParams changes and reset scroll position to top
   useEffect(() => {
     setActiveTab(currentValidTab);
-  }, [currentValidTab]);
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'instant',
+      });
+      mainScrollRef.current.scrollTop = 0;
+    }
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant',
+    });
+  }, [currentValidTab, location.search]);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [copiedUuid, setCopiedUuid] = useState(false);
@@ -190,7 +208,7 @@ const Company = () => {
   const [invSearchTerm, setInvSearchTerm] = useState('');
   const [invStatusFilter, setInvStatusFilter] = useState('ALL');
 
-  // Safely switch tab and persist query parameter in URL
+  // Safely switch tab, reset scroll to top, and persist query parameter in URL
   const handleTabChange = (newTab) => {
     const safeTab = VALID_TABS.includes(newTab) ? newTab : 'overview';
     setActiveTab(safeTab);
@@ -203,6 +221,20 @@ const Company = () => {
         next.set('tab', safeTab);
       }
       return next;
+    });
+
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'instant',
+      });
+      mainScrollRef.current.scrollTop = 0;
+    }
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant',
     });
   };
 
@@ -634,17 +666,111 @@ const Company = () => {
     }
   };
 
+  // Consistent Date Formatting Helper across table and modals
+  const formatEventDate = (dateString) => {
+    if (!dateString) return '—';
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    } catch {
+      return '—';
+    }
+  };
+
+  // Safe time remaining calculator for PENDING invitations
+  const getTimeRemaining = (expiresAt) => {
+    if (!expiresAt) return null;
+    try {
+      const now = new Date();
+      const expiry = new Date(expiresAt);
+      const diffMs = expiry.getTime() - now.getTime();
+      if (diffMs <= 0) return 'Expired';
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays >= 1) {
+        return `${diffDays} day${diffDays > 1 ? 's' : ''} left`;
+      }
+      if (diffHours >= 1) {
+        return `${diffHours} hr${diffHours > 1 ? 's' : ''} left`;
+      }
+      const diffMins = Math.max(1, Math.floor(diffMs / (1000 * 60)));
+      return `${diffMins} min${diffMins > 1 ? 's' : ''} left`;
+    } catch {
+      return null;
+    }
+  };
+
+  // Dynamic Lifecycle Event Renderer for Desktop Table
+  const renderInvitationLifecycleEvent = (inv) => {
+    const status = (inv.status || '').toUpperCase();
+
+    if (status === 'PENDING') {
+      const timeRemaining = getTimeRemaining(inv.expires_at);
+      const dateFormatted = formatEventDate(inv.expires_at);
+      return (
+        <div className="flex flex-col">
+          <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-[#CBD5E1] font-medium font-mono">
+            <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <span>Expires {dateFormatted}</span>
+          </div>
+          {timeRemaining && (
+            <span className="text-[11px] text-amber-600 dark:text-amber-400 font-mono mt-0.5 pl-5">
+              {timeRemaining}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    if (status === 'ACCEPTED') {
+      const acceptedDate = formatEventDate(inv.accepted_at || inv.updated_at);
+      return (
+        <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 font-medium font-mono">
+          <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+          <span>Accepted {acceptedDate !== '—' ? acceptedDate : ''}</span>
+        </div>
+      );
+    }
+
+    if (status === 'REVOKED') {
+      const revokedDate = formatEventDate(inv.updated_at);
+      return (
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#94A3B8] font-mono">
+          <Ban className="h-3.5 w-3.5 text-slate-400 dark:text-[#64748B] shrink-0" />
+          <span>Revoked {revokedDate !== '—' ? revokedDate : ''}</span>
+        </div>
+      );
+    }
+
+    if (status === 'EXPIRED') {
+      const expiredDate = formatEventDate(inv.expires_at);
+      return (
+        <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium font-mono">
+          <AlertTriangle className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+          <span>Expired {expiredDate}</span>
+        </div>
+      );
+    }
+
+    return <span className="text-slate-400 dark:text-[#64748B] text-xs font-mono">—</span>;
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white">
+    <div className="h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
       {/* Top SaaS Navbar */}
       <Navbar onToggleSidebar={() => setSidebarOpen((prev) => !prev)} />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Responsive Sidebar */}
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-mesh">
+        <main ref={mainScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-mesh min-h-0">
           <div className="max-w-6xl mx-auto space-y-6">
             
             {/* Breadcrumb Header */}
@@ -1664,7 +1790,7 @@ const Company = () => {
                                   Sent
                                 </th>
                                 <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
-                                  Expires
+                                  Deadline / Event
                                 </th>
                                 <th scope="col" className="px-6 py-3.5 text-right text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
                                   Actions
@@ -1673,7 +1799,9 @@ const Company = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-[#263449] bg-white dark:bg-[#151F32]">
                               {filteredInvitations.map((inv) => {
-                                const isPending = (inv.status || '').toUpperCase() === 'PENDING';
+                                const status = (inv.status || '').toUpperCase();
+                                const isPending = status === 'PENDING';
+                                const canReinvite = (status === 'EXPIRED' || status === 'REVOKED') && canInviteMembers;
 
                                 return (
                                   <tr key={inv.id} className="hover:bg-slate-50/60 dark:hover:bg-[#202D43]/50 transition-colors">
@@ -1706,24 +1834,12 @@ const Company = () => {
 
                                     {/* Sent Date */}
                                     <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 dark:text-[#94A3B8] font-mono">
-                                      {inv.created_at
-                                        ? new Date(inv.created_at).toLocaleDateString('en-US', {
-                                            month: 'short',
-                                            day: 'numeric',
-                                            year: 'numeric',
-                                          })
-                                        : '—'}
+                                      {formatEventDate(inv.created_at)}
                                     </td>
 
-                                    {/* Expiration Date */}
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 dark:text-[#94A3B8] font-mono">
-                                      {inv.expires_at
-                                        ? new Date(inv.expires_at).toLocaleDateString('en-US', {
-                                            month: 'short',
-                                            day: 'numeric',
-                                            year: 'numeric',
-                                          })
-                                        : '—'}
+                                    {/* Dynamic Lifecycle Event (Deadline / Accepted / Revoked / Expired) */}
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                      {renderInvitationLifecycleEvent(inv)}
                                     </td>
 
                                     {/* Actions */}
@@ -1734,6 +1850,7 @@ const Company = () => {
                                           size="xs"
                                           icon={Eye}
                                           onClick={() => openDetailsModal(inv)}
+                                          aria-label={`View details for invitation to ${inv.email}`}
                                           title="View invitation details"
                                         >
                                           Details
@@ -1745,13 +1862,14 @@ const Company = () => {
                                             size="xs"
                                             icon={Trash2}
                                             onClick={() => openRevokeModal(inv)}
+                                            aria-label={`Revoke invitation for ${inv.email}`}
                                             title="Revoke invitation"
                                           >
                                             Revoke
                                           </Button>
                                         )}
 
-                                        {!isPending && canInviteMembers && (
+                                        {canReinvite && (
                                           <Button
                                             variant="ghost"
                                             size="xs"
@@ -1762,7 +1880,9 @@ const Company = () => {
                                               designation: inv.designation,
                                               department: inv.department,
                                             })}
+                                            aria-label={`Invite ${inv.email} again with prefilled details`}
                                             title="Invite again with prefilled details"
+                                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
                                           >
                                             Re-invite
                                           </Button>
@@ -1779,7 +1899,9 @@ const Company = () => {
                         {/* MOBILE CARDS */}
                         <div className="grid grid-cols-1 gap-3 md:hidden">
                           {filteredInvitations.map((inv) => {
-                            const isPending = (inv.status || '').toUpperCase() === 'PENDING';
+                            const status = (inv.status || '').toUpperCase();
+                            const isPending = status === 'PENDING';
+                            const canReinvite = (status === 'EXPIRED' || status === 'REVOKED') && canInviteMembers;
 
                             return (
                               <div
@@ -1804,16 +1926,37 @@ const Company = () => {
                                     <span className="font-medium text-slate-700 dark:text-[#CBD5E1]">{inv.designation || '—'}</span>
                                   </div>
                                   <div>
-                                    <span className="text-slate-400 dark:text-[#94A3B8] block text-[10px] uppercase font-mono">Expires</span>
-                                    <span className="font-medium text-slate-700 dark:text-[#CBD5E1] font-mono">
-                                      {inv.expires_at
-                                        ? new Date(inv.expires_at).toLocaleDateString('en-US', {
-                                            month: 'short',
-                                            day: 'numeric',
-                                            year: 'numeric',
-                                          })
-                                        : '—'}
+                                    <span className="text-slate-400 dark:text-[#94A3B8] block text-[10px] uppercase font-mono">
+                                      {isPending ? 'Deadline' : 'Lifecycle Event'}
                                     </span>
+                                    <div className="font-medium text-slate-700 dark:text-[#CBD5E1] font-mono text-xs mt-0.5">
+                                      {isPending && (
+                                        <div>
+                                          <span>Expires {formatEventDate(inv.expires_at)}</span>
+                                          {getTimeRemaining(inv.expires_at) && (
+                                            <span className="block text-[10px] text-amber-600 dark:text-amber-400">
+                                              {getTimeRemaining(inv.expires_at)}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                      {status === 'ACCEPTED' && (
+                                        <span className="text-emerald-700 dark:text-emerald-400">
+                                          Accepted {formatEventDate(inv.accepted_at || inv.updated_at)}
+                                        </span>
+                                      )}
+                                      {status === 'REVOKED' && (
+                                        <span className="text-slate-500 dark:text-[#94A3B8]">
+                                          Revoked {formatEventDate(inv.updated_at) !== '—' ? formatEventDate(inv.updated_at) : ''}
+                                        </span>
+                                      )}
+                                      {status === 'EXPIRED' && (
+                                        <span className="text-rose-600 dark:text-rose-400">
+                                          Expired {formatEventDate(inv.expires_at)}
+                                        </span>
+                                      )}
+                                      {!['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED'].includes(status) && '—'}
+                                    </div>
                                   </div>
                                 </div>
 
@@ -1823,6 +1966,7 @@ const Company = () => {
                                     size="xs"
                                     icon={Eye}
                                     onClick={() => openDetailsModal(inv)}
+                                    aria-label={`View details for invitation to ${inv.email}`}
                                   >
                                     Details
                                   </Button>
@@ -1832,11 +1976,12 @@ const Company = () => {
                                       size="xs"
                                       icon={Trash2}
                                       onClick={() => openRevokeModal(inv)}
+                                      aria-label={`Revoke invitation for ${inv.email}`}
                                     >
                                       Revoke
                                     </Button>
                                   )}
-                                  {!isPending && canInviteMembers && (
+                                  {canReinvite && (
                                     <Button
                                       variant="ghost"
                                       size="xs"
@@ -1847,6 +1992,8 @@ const Company = () => {
                                         designation: inv.designation,
                                         department: inv.department,
                                       })}
+                                      aria-label={`Invite ${inv.email} again`}
+                                      className="text-indigo-600 dark:text-indigo-400"
                                     >
                                       Re-invite
                                     </Button>
@@ -2240,9 +2387,44 @@ const Company = () => {
         description="Detailed metadata for workspace invitation."
         size="md"
         footer={
-          <Button variant="secondary" size="sm" onClick={closeDetailsModal}>
-            Close
-          </Button>
+          <div className="flex items-center justify-end gap-2">
+            {selectedInvitation?.status === 'PENDING' && isOwner && (
+              <Button
+                variant="danger"
+                size="sm"
+                icon={Trash2}
+                onClick={() => {
+                  const invToRevoke = selectedInvitation;
+                  closeDetailsModal();
+                  openRevokeModal(invToRevoke);
+                }}
+              >
+                Revoke Invitation
+              </Button>
+            )}
+            {(selectedInvitation?.status === 'EXPIRED' || selectedInvitation?.status === 'REVOKED') && canInviteMembers && (
+              <Button
+                variant="primary"
+                size="sm"
+                icon={RotateCcw}
+                onClick={() => {
+                  const invData = {
+                    email: selectedInvitation.email,
+                    role: selectedInvitation.role,
+                    designation: selectedInvitation.designation,
+                    department: selectedInvitation.department,
+                  };
+                  closeDetailsModal();
+                  openInviteModal(invData);
+                }}
+              >
+                Send New Invitation
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" onClick={closeDetailsModal}>
+              Close
+            </Button>
+          </div>
         }
       >
         {selectedInvitation && (
@@ -2284,24 +2466,64 @@ const Company = () => {
                 </span>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 dark:text-[#94A3B8]">Expires</span>
-                <span className="font-mono text-slate-700 dark:text-[#CBD5E1]">
-                  {selectedInvitation.expires_at ? new Date(selectedInvitation.expires_at).toLocaleString() : '—'}
-                </span>
-              </div>
+              {/* PENDING: Expiration & Time Remaining */}
+              {selectedInvitation.status === 'PENDING' && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 dark:text-[#94A3B8]">Expires</span>
+                    <span className="font-mono text-slate-700 dark:text-[#CBD5E1]">
+                      {selectedInvitation.expires_at ? new Date(selectedInvitation.expires_at).toLocaleString() : '—'}
+                    </span>
+                  </div>
+                  {getTimeRemaining(selectedInvitation.expires_at) && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 dark:text-[#94A3B8]">Time Remaining</span>
+                      <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
+                        {getTimeRemaining(selectedInvitation.expires_at)}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
 
-              {selectedInvitation.accepted_at && (
+              {/* ACCEPTED: Accepted Date */}
+              {selectedInvitation.status === 'ACCEPTED' && (
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-[#94A3B8]">Accepted Date</span>
                   <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                    {new Date(selectedInvitation.accepted_at).toLocaleString()}
+                    {selectedInvitation.accepted_at
+                      ? new Date(selectedInvitation.accepted_at).toLocaleString()
+                      : selectedInvitation.updated_at
+                      ? new Date(selectedInvitation.updated_at).toLocaleString()
+                      : 'Accepted'}
+                  </span>
+                </div>
+              )}
+
+              {/* REVOKED: Revoked Date */}
+              {selectedInvitation.status === 'REVOKED' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 dark:text-[#94A3B8]">Revoked Date</span>
+                  <span className="font-mono text-slate-600 dark:text-[#94A3B8]">
+                    {selectedInvitation.updated_at
+                      ? new Date(selectedInvitation.updated_at).toLocaleString()
+                      : 'Revoked'}
+                  </span>
+                </div>
+              )}
+
+              {/* EXPIRED: Expired Date */}
+              {selectedInvitation.status === 'EXPIRED' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 dark:text-[#94A3B8]">Expired Date</span>
+                  <span className="font-mono text-rose-600 dark:text-rose-400 font-semibold">
+                    {selectedInvitation.expires_at ? new Date(selectedInvitation.expires_at).toLocaleString() : 'Expired'}
                   </span>
                 </div>
               )}
             </div>
 
-            {selectedInvitation.token && (
+            {selectedInvitation.token && selectedInvitation.status === 'PENDING' && (
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-mono font-medium uppercase text-slate-500 dark:text-[#94A3B8]">
                   Invitation Link

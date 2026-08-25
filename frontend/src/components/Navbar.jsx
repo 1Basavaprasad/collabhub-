@@ -156,7 +156,7 @@ const Navbar = ({ onToggleSidebar }) => {
 
   return (
     <>
-      <header className="sticky top-0 z-30 w-full border-b border-slate-200/80 dark:border-[#263449] bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-md shadow-xs">
+      <header className="shrink-0 sticky top-0 z-30 w-full border-b border-slate-200/80 dark:border-[#263449] bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-md shadow-xs">
         <div className="mx-auto flex h-14 w-full items-center justify-between px-4 sm:px-6 lg:px-8">
           
           {/* Left: Hamburger + Brand + Breadcrumbs */}

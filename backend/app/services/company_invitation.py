@@ -93,7 +93,7 @@ def create_company_invitation_service(
             detail="You are not a member of this company.",
         )
 
-    # 2. Only OWNER and ADMIN can invite members
+    # 2. Only OWNER and ADMIN can invite members, and only OWNER can invite another OWNER
     if inviter_membership.role not in (
         CompanyRole.OWNER,
         CompanyRole.ADMIN,
@@ -101,6 +101,12 @@ def create_company_invitation_service(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only company owners and admins can invite members.",
+        )
+
+    if role == CompanyRole.OWNER and inviter_membership.role != CompanyRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company owners can invite new owners.",
         )
 
     # 3. Retrieve company details
@@ -537,6 +543,12 @@ def revoke_company_invitation_service(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invitation not found.",
+        )
+
+    if invitation.role == CompanyRole.OWNER and membership.role != CompanyRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admins cannot revoke owner invitations.",
         )
 
     if invitation.status == InvitationStatus.REVOKED:

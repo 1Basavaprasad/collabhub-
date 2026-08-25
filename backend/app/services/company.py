@@ -170,6 +170,12 @@ def add_member_to_company_service(
             detail="Only company owners and admins can add members.",
         )
 
+    if role == CompanyRole.OWNER and membership.role != CompanyRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company owners can add members with the owner role.",
+        )
+
     existing = get_company_membership(db, company_id, new_user_id)
     if existing:
         raise HTTPException(

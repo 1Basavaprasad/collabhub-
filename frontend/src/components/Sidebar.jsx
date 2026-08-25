@@ -188,7 +188,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       <aside
         className={`fixed top-0 bottom-0 left-0 z-40 ${
           isCollapsed ? 'lg:w-16' : 'lg:w-60'
-        } w-60 border-r border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#0D1526] flex flex-col justify-between transition-all duration-150 ease-in-out lg:static lg:translate-x-0 ${
+        } w-60 border-r border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#0D1526] flex flex-col justify-between transition-all duration-150 ease-in-out lg:static lg:translate-x-0 h-full shrink-0 ${
           isOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full'
         }`}
       >

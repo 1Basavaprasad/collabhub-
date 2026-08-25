@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
@@ -85,6 +85,7 @@ const getColorClasses = (colorId) => {
 const Teams = () => {
   const { teamId: routeTeamId } = useParams();
   const navigate = useNavigate();
+  const mainScrollRef = useRef(null);
 
   const { user } = useAuth();
   const { company, members: companyMembers, canManageCompany, currentUserRole } = useCompany();
@@ -108,6 +109,7 @@ const Teams = () => {
     updateTeamMember,
     removeTeamMember,
     transferTeamLeadership,
+    setSelectedTeam,
   } = useTeam();
 
   // App Layout Shell State
@@ -174,13 +176,28 @@ const Teams = () => {
     }
   }, [feedback]);
 
-  // Load team details if URL contains :teamId
+  // Load team details if URL contains :teamId, otherwise clear selected team
   useEffect(() => {
     if (routeTeamId) {
       loadTeam(routeTeamId);
       loadTeamActivity(routeTeamId);
+    } else {
+      setSelectedTeam(null);
     }
-  }, [routeTeamId, loadTeam, loadTeamActivity]);
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'instant',
+      });
+      mainScrollRef.current.scrollTop = 0;
+    }
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant',
+    });
+  }, [routeTeamId, loadTeam, loadTeamActivity, setSelectedTeam]);
 
   // Close 3-dot menu on click outside
   useEffect(() => {
@@ -311,6 +328,7 @@ const Teams = () => {
 
   // Back to Teams directory
   const handleBackToTeams = () => {
+    setSelectedTeam(null);
     navigate('/teams');
   };
 
@@ -528,7 +546,8 @@ const Teams = () => {
       setDeleteConfirmText('');
       setFeedback({ type: 'success', message: `Team "${deletedName}" permanently deleted.` });
       await loadTeams();
-      if (selectedTeam?.id === target.id) {
+      if (routeTeamId === target.id || selectedTeam?.id === target.id) {
+        setSelectedTeam(null);
         navigate('/teams');
       }
     } catch (err) {
@@ -644,16 +663,16 @@ const Teams = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white">
+    <div className="h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
       {/* Top SaaS Navbar */}
       <Navbar onToggleSidebar={() => setSidebarOpen((prev) => !prev)} />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Responsive Sidebar */}
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-mesh">
+        <main ref={mainScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-mesh min-h-0">
           <div className="max-w-6xl mx-auto space-y-6">
             
             {/* Breadcrumb Header */}
@@ -664,18 +683,18 @@ const Teams = () => {
                 <span>Workspace</span>
                 <ChevronRight className="h-3 w-3 text-slate-400 dark:text-[#64748B]" />
                 <span className="text-indigo-600 dark:text-indigo-400 font-medium truncate max-w-xs">
-                  {selectedTeam ? selectedTeam.name : 'Teams'}
+                  {routeTeamId && selectedTeam ? selectedTeam.name : 'Teams'}
                 </span>
               </div>
 
-              {selectedTeam && (
+              {routeTeamId && (
                 <button
                   type="button"
                   onClick={handleBackToTeams}
                   className="text-xs text-slate-500 dark:text-[#94A3B8] hover:text-indigo-600 dark:hover:text-indigo-400 font-medium flex items-center gap-1 cursor-pointer transition-colors"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
-                  <span>All Teams</span>
+                  <span>Back to all teams</span>
                 </button>
               )}
             </div>
@@ -726,11 +745,10 @@ const Teams = () => {
             {/* ============================================================ */}
             {/* VIEW 1: DEDICATED TEAM DETAILS VIEW                          */}
             {/* ============================================================ */}
-            {selectedTeam ? (
-              <div className="space-y-6 animate-fade-in">
-                
-                {/* Header Actions & Breadcrumb Bar */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {routeTeamId ? (
+              teamDetailLoading && (!selectedTeam || selectedTeam.id !== routeTeamId) ? (
+                /* Loading Skeleton for Team Details View */
+                <div className="space-y-6 animate-fade-in">
                   <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-[#94A3B8]">
                     <button
                       type="button"
@@ -738,26 +756,56 @@ const Teams = () => {
                       className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer flex items-center gap-1 font-medium"
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
-                      <span>Back to Teams</span>
+                      <span>Back to all teams</span>
                     </button>
-                    <span className="text-slate-300 dark:text-[#263449]">/</span>
-                    <span className="text-slate-400 dark:text-[#94A3B8]">{company?.name || 'Workspace'}</span>
-                    <span className="text-slate-300 dark:text-[#263449]">/</span>
-                    <span className="text-slate-900 dark:text-[#F8FAFC] font-semibold truncate max-w-xs">{selectedTeam.name}</span>
                   </div>
+                  <Card className="p-6 sm:p-7 border border-slate-200/80 dark:border-[#263449] shadow-xs space-y-4">
+                    <div className="flex items-start gap-4">
+                      <div className="h-14 w-14 rounded-2xl bg-slate-200 dark:bg-[#182235] skeleton-shimmer shrink-0" />
+                      <div className="space-y-2 flex-1">
+                        <div className="h-6 w-48 bg-slate-200 dark:bg-[#182235] rounded-lg skeleton-shimmer" />
+                        <div className="h-4 w-72 bg-slate-200 dark:bg-[#182235] rounded-lg skeleton-shimmer" />
+                      </div>
+                    </div>
+                  </Card>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="h-24 rounded-xl bg-white dark:bg-[#151F32] border border-slate-200/80 dark:border-[#263449] p-4 skeleton-shimmer" />
+                    ))}
+                  </div>
+                </div>
+              ) : selectedTeam && selectedTeam.id === routeTeamId ? (
+                <div className="space-y-6 animate-fade-in">
+                  
+                  {/* Header Actions & Breadcrumb Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-[#94A3B8]">
+                      <button
+                        type="button"
+                        onClick={handleBackToTeams}
+                        className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer flex items-center gap-1 font-medium"
+                      >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                        <span>Back to all teams</span>
+                      </button>
+                      <span className="text-slate-300 dark:text-[#263449]">/</span>
+                      <span className="text-slate-400 dark:text-[#94A3B8]">{company?.name || 'Workspace'}</span>
+                      <span className="text-slate-300 dark:text-[#263449]">/</span>
+                      <span className="text-slate-900 dark:text-[#F8FAFC] font-semibold truncate max-w-xs">{selectedTeam.name}</span>
+                    </div>
 
-                  {/* Header Actions */}
-                  <div className="flex items-center gap-2">
-                    {canManageCurrentTeam && (
-                      <>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          icon={Edit2}
-                          onClick={() => handleOpenEditModal(selectedTeam)}
-                        >
-                          Edit Team
-                        </Button>
+                    {/* Header Actions */}
+                    <div className="flex items-center gap-2">
+                      {canManageCurrentTeam && (
+                        <>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={Edit2}
+                            onClick={() => handleOpenEditModal(selectedTeam)}
+                          >
+                            Edit Team
+                          </Button>
 
                         {canManageCompany && (
                           <>
@@ -1330,10 +1378,36 @@ const Teams = () => {
 
               </div>
             ) : (
-              /* ============================================================ */
-              /* VIEW 2: TEAMS DASHBOARD DIRECTORY                            */
-              /* ============================================================ */
-              <div className="space-y-6 animate-fade-in">
+              /* Team not found fallback */
+              <Card className="p-12 text-center space-y-4 border-dashed border border-slate-300/80 dark:border-[#263449] bg-white dark:bg-[#151F32]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 mx-auto">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                    Team not found
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-[#94A3B8] max-w-md mx-auto">
+                    The requested team does not exist or has been removed from this workspace.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleBackToTeams}
+                    className="text-xs font-medium"
+                  >
+                    Back to all teams
+                  </Button>
+                </div>
+              </Card>
+            )
+          ) : (
+            /* ============================================================ */
+            /* VIEW 2: TEAMS DASHBOARD DIRECTORY                            */
+            /* ============================================================ */
+            <div className="space-y-6 animate-fade-in">
                 
                 {/* Header & Primary CTA */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
