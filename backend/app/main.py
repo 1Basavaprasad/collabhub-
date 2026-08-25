@@ -11,6 +11,7 @@ from app.core.database import engine, get_db
 from app.routers.auth import router as auth_router
 from app.routers.company import router as company_router
 from app.routers.team import router as team_router
+from app.routers.project import router as project_router
 
 # In production, documentation endpoints can be conditionally disabled unless explicitly allowed
 is_prod = settings.ENVIRONMENT.lower() == "production"
@@ -45,6 +46,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(company_router)
 app.include_router(team_router)
+app.include_router(project_router)
 
 
 @app.get("/health", tags=["Health"])

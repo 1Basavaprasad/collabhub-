@@ -12,6 +12,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.company_invitation import CompanyInvitation
     from app.models.company_member import CompanyMember
+    from app.models.project import Project
     from app.models.team import Team
 
 
@@ -92,6 +93,13 @@ class Company(Base):
     # Company teams
     teams: Mapped[list["Team"]] = relationship(
         "Team",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+
+    # Company projects
+    projects: Mapped[list["Project"]] = relationship(
+        "Project",
         back_populates="company",
         cascade="all, delete-orphan",
     )

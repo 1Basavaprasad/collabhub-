@@ -69,9 +69,9 @@ const Sidebar = ({ isOpen, onClose }) => {
     },
     {
       name: 'Projects',
+      to: '/projects',
       icon: FolderKanban,
-      disabled: true,
-      tooltip: 'Projects module coming soon',
+      disabled: false,
     },
     {
       name: 'Tasks',

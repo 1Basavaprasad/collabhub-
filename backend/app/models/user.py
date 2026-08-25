@@ -12,6 +12,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.company_invitation import CompanyInvitation
     from app.models.company_member import CompanyMember
+    from app.models.project import Project
     from app.models.team_member import TeamMember
 
 
@@ -86,4 +87,11 @@ class User(Base):
         "TeamMember",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+
+    # Projects created by this user
+    created_projects: Mapped[list["Project"]] = relationship(
+        "Project",
+        back_populates="creator",
+        foreign_keys="[Project.created_by]",
     )

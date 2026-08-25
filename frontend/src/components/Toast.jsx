@@ -29,20 +29,37 @@ const toastConfig = {
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
 
-  const addToast = useCallback((message, type = 'success', duration = 4000) => {
-    const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
-    setToasts((prev) => [...prev, { id, message, type }]);
-
-    if (duration > 0) {
-      setTimeout(() => {
-        removeToast(id);
-      }, duration);
-    }
-  }, []);
-
   const removeToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  const addToast = useCallback((messageOrOptions, type = 'success', duration = 4000) => {
+    let msgText = '';
+    let titleText = null;
+    let toastType = type;
+    let toastDuration = duration;
+
+    if (typeof messageOrOptions === 'object' && messageOrOptions !== null) {
+      msgText = messageOrOptions.message || messageOrOptions.title || '';
+      titleText = messageOrOptions.title && messageOrOptions.message ? messageOrOptions.title : null;
+      toastType = messageOrOptions.type || type || 'success';
+      toastDuration = typeof messageOrOptions.duration === 'number' ? messageOrOptions.duration : duration;
+    } else {
+      msgText = String(messageOrOptions || '');
+    }
+
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
+    setToasts((prev) => [
+      ...prev,
+      { id, message: msgText, title: titleText, type: toastType },
+    ]);
+
+    if (toastDuration > 0) {
+      setTimeout(() => {
+        removeToast(id);
+      }, toastDuration);
+    }
+  }, [removeToast]);
 
   return (
     <ToastContext.Provider value={{ addToast, removeToast }}>
@@ -59,8 +76,13 @@ export const ToastProvider = ({ children }) => {
               className={`pointer-events-auto flex items-start gap-3 p-3 rounded-xl border shadow-lg ${config.bg} animate-slide-in-right transition-all`}
             >
               <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${config.iconColor}`} />
-              <div className="flex-1 text-xs font-medium leading-snug">
-                {toast.message}
+              <div className="flex-1 text-xs leading-snug">
+                {toast.title && (
+                  <p className="font-semibold mb-0.5 text-slate-900 dark:text-white">
+                    {toast.title}
+                  </p>
+                )}
+                <p className="font-medium">{toast.message}</p>
               </div>
               <button
                 type="button"

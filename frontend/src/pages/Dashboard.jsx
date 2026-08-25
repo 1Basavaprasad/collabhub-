@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
 import { useTeam } from '../context/TeamContext';
+import { useProject } from '../context/ProjectContext';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import StatCard from '../components/StatCard';
@@ -35,6 +36,7 @@ const Dashboard = () => {
     canManageCompany,
   } = useCompany();
   const { teams = [] } = useTeam();
+  const { projects = [] } = useProject();
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -80,10 +82,13 @@ const Dashboard = () => {
     {
       step: '03',
       title: 'Projects',
-      desc: 'Collaborative deliverables and project boards.',
+      desc: projects.length > 0
+        ? `${projects.length} ${projects.length === 1 ? 'project' : 'projects'} active in workspace.`
+        : 'Organize deliverables and project boards.',
       icon: FolderKanban,
-      ready: false,
-      status: 'Coming soon',
+      ready: true,
+      status: projects.length > 0 ? 'Active' : 'Available',
+      link: '/projects',
     },
     {
       step: '04',

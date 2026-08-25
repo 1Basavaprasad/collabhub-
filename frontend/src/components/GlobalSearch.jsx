@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import { useTeam } from '../context/TeamContext';
+import { useProject } from '../context/ProjectContext';
 import Avatar, { getDisplayName } from './Avatar';
 import Badge from './Badge';
 import {
   Search,
   Building2,
   Users2,
+  FolderKanban,
   Mail,
   User,
   LayoutDashboard,
@@ -30,6 +32,7 @@ const GlobalSearch = ({ isOpen, onClose }) => {
     selectCompany,
   } = useCompany();
   const { teams = [] } = useTeam();
+  const { projects = [] } = useProject();
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -52,6 +55,21 @@ const GlobalSearch = ({ isOpen, onClose }) => {
 
   // Normalize search text
   const cleanQuery = query.trim().toLowerCase();
+
+  // Filtered Projects
+  const matchedProjects = useMemo(() => {
+    if (!cleanQuery) return [];
+    if (!Array.isArray(projects)) return [];
+
+    return projects
+      .filter((p) => {
+        if (!p) return false;
+        const name = (p.name || '').toLowerCase();
+        const desc = (p.description || '').toLowerCase();
+        return name.includes(cleanQuery) || desc.includes(cleanQuery);
+      })
+      .slice(0, 4);
+  }, [projects, cleanQuery]);
 
   // Filtered Teams
   const matchedTeams = useMemo(() => {
@@ -163,6 +181,14 @@ const GlobalSearch = ({ isOpen, onClose }) => {
         action: () => navigate('/teams'),
       },
       {
+        id: 'quick-projects',
+        type: 'QUICK_LINK',
+        title: 'Projects',
+        subtitle: 'Initiatives and deliverables',
+        icon: FolderKanban,
+        action: () => navigate('/projects'),
+      },
+      {
         id: 'quick-members',
         type: 'QUICK_LINK',
         title: 'Members Directory',
@@ -196,6 +222,17 @@ const GlobalSearch = ({ isOpen, onClose }) => {
     }
 
     const items = [];
+
+    matchedProjects.forEach((p) => {
+      items.push({
+        id: `project-${p.id}`,
+        type: 'PROJECT',
+        title: p.name,
+        subtitle: p.description || 'Workspace Project',
+        data: p,
+        action: () => navigate(`/projects/${p.id}`),
+      });
+    });
 
     matchedTeams.forEach((t) => {
       items.push({
@@ -251,6 +288,7 @@ const GlobalSearch = ({ isOpen, onClose }) => {
   }, [
     cleanQuery,
     quickLinks,
+    matchedProjects,
     matchedTeams,
     matchedMembers,
     matchedCompanies,
@@ -422,6 +460,63 @@ const GlobalSearch = ({ isOpen, onClose }) => {
           {cleanQuery && totalResultsCount > 0 && (
             <div className="space-y-4">
               
+              {/* CATEGORY: PROJECTS */}
+              {matchedProjects.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] font-mono flex items-center justify-between">
+                    <span>Projects ({matchedProjects.length})</span>
+                    <span>Initiatives</span>
+                  </div>
+
+                  <div className="space-y-1">
+                    {matchedProjects.map((p) => {
+                      const globalIdx = flattenedResults.findIndex(
+                        (item) => item.id === `project-${p.id}`
+                      );
+                      const isSelected = selectedIndex === globalIdx;
+
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            navigate(`/projects/${p.id}`);
+                            onClose();
+                          }}
+                          onMouseEnter={() => setSelectedIndex(globalIdx)}
+                          className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-500/30'
+                              : 'hover:bg-slate-50 dark:hover:bg-[#202D43] border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 shrink-0">
+                              <FolderKanban className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] block truncate">
+                                {p.name}
+                              </span>
+                              <span className="text-[11px] text-slate-500 dark:text-[#94A3B8] truncate block">
+                                {p.description || 'Workspace Project'}
+                              </span>
+                            </div>
+                          </div>
+                          <Badge
+                            variant={p.status === 'ACTIVE' ? 'success' : 'neutral'}
+                            size="xs"
+                            className="shrink-0"
+                          >
+                            {p.status}
+                          </Badge>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* CATEGORY 0: TEAMS */}
               {matchedTeams.length > 0 && (
                 <div className="space-y-1.5">

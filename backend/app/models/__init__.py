@@ -9,6 +9,9 @@ from app.models.company_invitation import CompanyInvitation, InvitationStatus
 from app.models.team import Team
 from app.models.team_member import TeamMember, TeamRole
 from app.models.team_activity import TeamActivity
+from app.models.project import Project, ProjectStatus
+from app.models.project_team import ProjectTeam
+from app.models.project_member import ProjectMember
 
 __all__ = [
     "Base",
@@ -23,4 +26,8 @@ __all__ = [
     "TeamMember",
     "TeamRole",
     "TeamActivity",
+    "Project",
+    "ProjectStatus",
+    "ProjectTeam",
+    "ProjectMember",
 ]
