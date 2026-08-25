@@ -273,6 +273,9 @@ def send_password_reset_email(
             server.starttls()
             server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
             server.send_message(msg)
+        except Exception as e:
+            logger.error(f"Failed to send password reset email to {email}: {e}")
+            raise
         finally:
             if server:
                 try:

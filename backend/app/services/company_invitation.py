@@ -1,9 +1,10 @@
 import hashlib
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -29,6 +30,7 @@ from app.repositories.company_invitation import (
 from app.repositories.user import get_user_by_email, get_user_by_id
 from app.services.email import send_company_invitation_email
 
+logger = logging.getLogger(__name__)
 
 INVITATION_EXPIRE_HOURS = 72
 
@@ -39,6 +41,34 @@ def _hash_invitation_token(token: str) -> str:
     ).hexdigest()
 
 
+def _safe_send_company_invitation_email(
+    recipient_email: str,
+    company_name: str,
+    inviter_name: str,
+    role: str,
+    invitation_url: str,
+    expires_at: datetime | str,
+    designation: str | None = None,
+    department: str | None = None,
+) -> None:
+    """Execute invitation email sending safely inside a background task without raising unhandled errors."""
+    try:
+        send_company_invitation_email(
+            recipient_email=recipient_email,
+            company_name=company_name,
+            inviter_name=inviter_name,
+            role=role,
+            invitation_url=invitation_url,
+            expires_at=expires_at,
+            designation=designation,
+            department=department,
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to deliver background invitation email to {recipient_email}: {e}"
+        )
+
+
 def create_company_invitation_service(
     db: Session,
     company_id: uuid.UUID,
@@ -47,6 +77,7 @@ def create_company_invitation_service(
     role: CompanyRole = CompanyRole.MEMBER,
     designation: str | None = None,
     department: str | None = None,
+    background_tasks: BackgroundTasks | None = None,
 ) -> tuple[CompanyInvitation, str]:
 
     # 1. Check inviter's company membership
@@ -170,9 +201,10 @@ def create_company_invitation_service(
 
     role_str = role.value if hasattr(role, "value") else str(role)
 
-    # 14. Send email via SMTP
-    try:
-        send_company_invitation_email(
+    # 14. Dispatch invitation email via BackgroundTasks without blocking API response
+    if background_tasks:
+        background_tasks.add_task(
+            _safe_send_company_invitation_email,
             recipient_email=normalized_email,
             company_name=company.name,
             inviter_name=inviter_display,
@@ -182,13 +214,16 @@ def create_company_invitation_service(
             designation=normalized_designation,
             department=normalized_department,
         )
-    except Exception as e:
-        # Roll back invitation from database on delivery failure
-        db.delete(invitation)
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Invitation could not be delivered. Please verify your SMTP settings or try again.",
+    else:
+        _safe_send_company_invitation_email(
+            recipient_email=normalized_email,
+            company_name=company.name,
+            inviter_name=inviter_display,
+            role=role_str,
+            invitation_url=invitation_url,
+            expires_at=expires_at,
+            designation=normalized_designation,
+            department=normalized_department,
         )
 
     # Return raw token separately (for programmatic/test usage if needed)

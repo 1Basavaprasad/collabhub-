@@ -1,8 +1,10 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
-# pyrefly: ignore [missing-import]
+from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import (
     generate_password_reset_token,
     hash_password,
@@ -23,7 +25,19 @@ from app.repositories.user import (
 )
 from app.schemas.auth import LoginRequest, RegisterRequest
 from app.services.email import send_password_reset_email
-from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_send_password_reset_email(email: str, reset_link: str) -> None:
+    """Execute password reset email sending safely inside a background task without raising unhandled errors."""
+    try:
+        send_password_reset_email(
+            email=email,
+            reset_link=reset_link,
+        )
+    except Exception as e:
+        logger.error(f"Failed to deliver background password reset email: {e}")
 
 
 def register_user(db: Session, data: RegisterRequest) -> User:
@@ -62,7 +76,11 @@ def login_user(db: Session, data: LoginRequest) -> User:
     return user
 
 
-def forgot_password(db: Session, email: str) -> None:
+def forgot_password(
+    db: Session,
+    email: str,
+    background_tasks: BackgroundTasks | None = None,
+) -> None:
     user = get_user_by_email(db, email)
 
     if not user:
@@ -88,11 +106,18 @@ def forgot_password(db: Session, email: str) -> None:
     # Create the reset link
     reset_link = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
 
-    # Send reset email
-    send_password_reset_email(
-        email=user.email,
-        reset_link=reset_link,
-    )
+    # Schedule background email task without blocking HTTP response
+    if background_tasks:
+        background_tasks.add_task(
+            _safe_send_password_reset_email,
+            email=user.email,
+            reset_link=reset_link,
+        )
+    else:
+        _safe_send_password_reset_email(
+            email=user.email,
+            reset_link=reset_link,
+        )
 
     return None
 

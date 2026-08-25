@@ -1,5 +1,4 @@
-# pyrefly: ignore [missing-import]
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
@@ -91,9 +90,10 @@ def get_me(
 @router.post("/forgot-password")
 def forgot_password_request(
     data: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    forgot_password(db, data.email)
+    forgot_password(db, data.email, background_tasks=background_tasks)
 
     return {
         "message": "If an account exists for this email, a password reset link has been sent.",

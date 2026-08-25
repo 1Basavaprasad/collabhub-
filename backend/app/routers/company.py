@@ -1,7 +1,7 @@
 import uuid
 
 # pyrefly: ignore [missing-import]
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
@@ -292,6 +292,7 @@ def get_company_invitations(
 def create_company_invitation(
     company_id: uuid.UUID,
     data: CompanyInvitationCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -303,6 +304,7 @@ def create_company_invitation(
         role=data.role,
         designation=data.designation,
         department=data.department,
+        background_tasks=background_tasks,
     )
 
     return invitation
