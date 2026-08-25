@@ -186,3 +186,24 @@ export const acceptCompanyInvitationApi = async (token) => {
   const response = await api.post(`/companies/invitations/accept/${encodeURIComponent(token)}`);
   return response.data;
 };
+
+/**
+ * Remove a member from the company (OWNER/ADMIN only)
+ * @param {string} companyId - UUID of the company
+ * @param {string} userId - UUID of the user/member to remove
+ * @returns {Promise<Object>} - Confirmation message
+ */
+export const removeCompanyMemberApi = async (companyId, userId) => {
+  const response = await api.delete(`/companies/${companyId}/members/${userId}`);
+  return response.data;
+};
+
+/**
+ * Leave a company as the authenticated user
+ * @param {string} companyId - UUID of the company
+ * @returns {Promise<Object>} - Confirmation message
+ */
+export const leaveCompanyApi = async (companyId) => {
+  const response = await api.post(`/companies/${companyId}/leave`);
+  return response.data;
+};

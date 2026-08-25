@@ -15,6 +15,8 @@ import {
   revokeCompanyInvitationApi,
   verifyCompanyInvitationApi,
   acceptCompanyInvitationApi,
+  removeCompanyMemberApi,
+  leaveCompanyApi,
 } from '../api/companyApi';
 
 const CompanyContext = createContext(null);
@@ -348,6 +350,49 @@ export const CompanyProvider = ({ children }) => {
     }
   };
 
+  // Remove a member from the company (OWNER/ADMIN only)
+  const removeCompanyMember = async (userId) => {
+    if (!company?.id) {
+      throw new Error('No active company to remove member from.');
+    }
+
+    setError(null);
+    try {
+      const result = await removeCompanyMemberApi(company.id, userId);
+      setMembers((prev) => prev.filter((m) => m.user_id !== userId && m.user?.id !== userId));
+      return result;
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.detail ||
+        err.message ||
+        'Failed to remove company member.';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
+  // Leave company as current authenticated user
+  const leaveCompany = async () => {
+    if (!company?.id) {
+      throw new Error('No active company to leave.');
+    }
+
+    setError(null);
+    try {
+      const result = await leaveCompanyApi(company.id);
+      // Refresh user companies & active company
+      await fetchCompany();
+      return result;
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.detail ||
+        err.message ||
+        'Failed to leave company.';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
   // Select an active company from user's companies list
   const selectCompany = async (selectedCompany) => {
     if (selectedCompany && selectedCompany.id) {
@@ -419,6 +464,8 @@ export const CompanyProvider = ({ children }) => {
     acceptInvitation,
     addCompanyMember,
     updateCompanyMember,
+    removeCompanyMember,
+    leaveCompany,
     selectCompany,
     clearError: () => setError(null),
     clearInvitationsError: () => setInvitationsError(null),

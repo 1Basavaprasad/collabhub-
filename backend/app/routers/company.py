@@ -33,6 +33,8 @@ from app.services.company import (
     get_company_service,
     get_my_companies_list,
     get_my_company,
+    leave_company_service,
+    remove_member_from_company_service,
     update_company_member_service,
     update_company_service,
 )
@@ -261,6 +263,42 @@ def update_company_member(
         role=data.role,
         designation=data.designation,
         department=data.department,
+    )
+
+
+@router.delete(
+    "/{company_id}/members/{user_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Remove a member from the company",
+)
+def remove_company_member(
+    company_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return remove_member_from_company_service(
+        db=db,
+        company_id=company_id,
+        requesting_user_id=current_user.id,
+        target_user_id=user_id,
+    )
+
+
+@router.post(
+    "/{company_id}/leave",
+    status_code=status.HTTP_200_OK,
+    summary="Leave a company",
+)
+def leave_company(
+    company_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return leave_company_service(
+        db=db,
+        company_id=company_id,
+        user_id=current_user.id,
     )
 
 

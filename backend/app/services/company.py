@@ -1,10 +1,14 @@
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.company import Company
 from app.models.company_member import CompanyMember, CompanyRole
+from app.models.team import Team
+from app.models.team_activity import TeamActivity
+from app.models.team_member import TeamMember, TeamRole
 from app.repositories.company import (
     add_company_member,
     count_company_owners,
@@ -14,9 +18,13 @@ from app.repositories.company import (
     get_company_by_id,
     get_company_members,
     get_company_membership,
+    get_company_membership_for_update,
+    lock_company_for_update,
+    remove_company_member,
     update_company,
     update_company_member,
 )
+from app.repositories.team import count_team_leads, get_team_members
 
 
 def create_company_service(
@@ -207,7 +215,10 @@ def update_company_member_service(
             detail="You do not have access to this company.",
         )
 
-    # 2. Check target user membership
+    # 2. Acquire lock on company to serialize role/owner modifications
+    lock_company_for_update(db, company_id)
+
+    # 3. Check target user membership
     target_membership = get_company_membership(db, company_id, target_user_id)
     if not target_membership:
         raise HTTPException(
@@ -215,7 +226,7 @@ def update_company_member_service(
             detail="Member not found in this company.",
         )
 
-    # 3. Role-based permission checks
+    # 4. Role-based permission checks
     if requesting_membership.role == CompanyRole.MEMBER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -251,3 +262,190 @@ def update_company_member_service(
         designation=designation,
         department=department,
     )
+
+
+def _clean_up_user_company_teams(
+    db: Session,
+    company_id: uuid.UUID,
+    user_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    reason: str,
+) -> None:
+    """
+    Remove the user from all teams belonging strictly to the specified company.
+    Enforces team lead constraint: if the user is the ONLY lead of a team with > 1 total members,
+    rejects the departure/removal to prevent an orphan team with active members.
+    """
+    statement = (
+        select(TeamMember)
+        .join(Team, TeamMember.team_id == Team.id)
+        .options(joinedload(TeamMember.team))
+        .where(
+            Team.company_id == company_id,
+            TeamMember.user_id == user_id,
+        )
+    )
+    team_members = list(db.execute(statement).scalars().all())
+
+    # 1. Validate team lead constraints across all affected teams in this company
+    for tm in team_members:
+        if tm.role == TeamRole.LEAD:
+            leads_count = count_team_leads(db, tm.team_id)
+            total_members = len(get_team_members(db, tm.team_id))
+            if leads_count <= 1 and total_members > 1:
+                team_name = tm.team.name if tm.team else "a team"
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot remove member who is the only lead of team '{team_name}'. Please reassign team leadership first.",
+                )
+
+    # 2. Delete team memberships and log team activity
+    for tm in team_members:
+        db.delete(tm)
+        activity = TeamActivity(
+            team_id=tm.team_id,
+            actor_user_id=actor_user_id,
+            action="MEMBER_REMOVED",
+            details=f"Member removed from team due to company {reason}.",
+        )
+        db.add(activity)
+
+
+def remove_member_from_company_service(
+    db: Session,
+    company_id: uuid.UUID,
+    requesting_user_id: uuid.UUID,
+    target_user_id: uuid.UUID,
+) -> dict:
+    """
+    Remove a member from a company (OWNER/ADMIN only).
+    Self-removal must use the dedicated leave endpoint.
+    Atomic: cleans up company membership, cleans up team memberships in this company, and protects the last owner.
+    """
+    # 1. Prevent self-removal via admin endpoint
+    if requesting_user_id == target_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot remove yourself using the admin removal endpoint. Use the leave company endpoint instead.",
+        )
+
+    # 2. Verify company existence and lock row for atomic serialization
+    company = lock_company_for_update(db, company_id)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found.",
+        )
+
+    # 3. Check requesting user membership & permissions
+    requesting_membership = get_company_membership(db, company_id, requesting_user_id)
+    if not requesting_membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this company.",
+        )
+
+    if requesting_membership.role == CompanyRole.MEMBER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Members cannot remove company members.",
+        )
+
+    # 4. Check target user membership
+    target_membership = get_company_membership(db, company_id, target_user_id)
+    if not target_membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found in this company.",
+        )
+
+    # 5. Permission checks for ADMIN requesting user
+    if requesting_membership.role == CompanyRole.ADMIN:
+        if target_membership.role == CompanyRole.OWNER:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admins cannot remove company owners.",
+            )
+
+    # 6. Last owner protection
+    if target_membership.role == CompanyRole.OWNER:
+        owners_count = count_company_owners(db, company_id)
+        if owners_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Company must have at least one owner.",
+            )
+
+    # 7. Atomically clean up team memberships in this company and check team lead rules
+    _clean_up_user_company_teams(
+        db=db,
+        company_id=company_id,
+        user_id=target_user_id,
+        actor_user_id=requesting_user_id,
+        reason="member removal",
+    )
+
+    # 8. Remove company membership and commit atomically
+    db.delete(target_membership)
+    db.commit()
+
+    return {
+        "message": "Member removed from company successfully.",
+        "company_id": str(company_id),
+        "user_id": str(target_user_id),
+    }
+
+
+def leave_company_service(
+    db: Session,
+    company_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> dict:
+    """
+    Allow the authenticated user to leave a company.
+    Last owner cannot leave unless another owner exists.
+    Atomic: cleans up company membership and team memberships in this company.
+    """
+    # 1. Verify company existence and lock row for atomic serialization
+    company = lock_company_for_update(db, company_id)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found.",
+        )
+
+    # 2. Check user membership
+    membership = get_company_membership(db, company_id, user_id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this company.",
+        )
+
+    # 3. Last owner protection
+    if membership.role == CompanyRole.OWNER:
+        owners_count = count_company_owners(db, company_id)
+        if owners_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot leave company as the only owner. Transfer ownership or assign another owner first.",
+            )
+
+    # 4. Atomically clean up team memberships in this company and check team lead rules
+    _clean_up_user_company_teams(
+        db=db,
+        company_id=company_id,
+        user_id=user_id,
+        actor_user_id=user_id,
+        reason="departure",
+    )
+
+    # 5. Remove company membership and commit atomically
+    db.delete(membership)
+    db.commit()
+
+    return {
+        "message": "Successfully left the company.",
+        "company_id": str(company_id),
+        "user_id": str(user_id),
+    }

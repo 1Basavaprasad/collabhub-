@@ -61,6 +61,18 @@ def get_company_by_id(
     return db.execute(statement).scalar_one_or_none()
 
 
+def lock_company_for_update(
+    db: Session,
+    company_id: uuid.UUID,
+) -> Company | None:
+    statement = (
+        select(Company)
+        .where(Company.id == company_id)
+        .with_for_update()
+    )
+    return db.execute(statement).scalar_one_or_none()
+
+
 def get_company_membership(
     db: Session,
     company_id: uuid.UUID,
@@ -219,3 +231,27 @@ def update_company(
     db.refresh(company)
 
     return company
+
+
+def remove_company_member(
+    db: Session,
+    membership: CompanyMember,
+) -> None:
+    db.delete(membership)
+    db.commit()
+
+
+def get_company_membership_for_update(
+    db: Session,
+    company_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> CompanyMember | None:
+    statement = (
+        select(CompanyMember)
+        .where(
+            CompanyMember.company_id == company_id,
+            CompanyMember.user_id == user_id,
+        )
+        .with_for_update(of=CompanyMember)
+    )
+    return db.execute(statement).scalar_one_or_none()

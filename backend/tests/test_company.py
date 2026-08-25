@@ -585,3 +585,296 @@ def test_invitation_state_transitions_and_validations():
     assert "already been accepted" in accepted_again.json()["detail"]
 
 
+def test_member_lifecycle_removal_and_permissions():
+    """
+    Tests 1, 2, 3, 4, 8:
+    - OWNER removes MEMBER -> Success
+    - ADMIN removes MEMBER -> Success
+    - ADMIN cannot remove OWNER -> 403
+    - MEMBER cannot remove MEMBER -> 403
+    - Cross-company removal -> 403/404
+    - Self-removal via admin endpoint -> 400
+    - Last OWNER removal attempt -> 400
+    """
+    suffix = uuid.uuid4().hex[:8]
+    owner = _create_and_login_user(f"own_rem_{suffix}", "Owner Alice")
+    admin = _create_and_login_user(f"adm_rem_{suffix}", "Admin Bob")
+    member1 = _create_and_login_user(f"mem1_rem_{suffix}", "Member Charlie")
+    member2 = _create_and_login_user(f"mem2_rem_{suffix}", "Member Dave")
+    outsider = _create_and_login_user(f"out_rem_{suffix}", "Outsider Eve")
+
+    # Create Company A
+    c_res = client.post("/companies", headers=owner["headers"], json={"name": f"Lifecycle Corp {suffix}"})
+    assert c_res.status_code == 201
+    company_id = c_res.json()["id"]
+
+    # Add Admin, Member 1, Member 2
+    client.post(f"/companies/{company_id}/members?user_id={admin['id']}&role=ADMIN", headers=owner["headers"])
+    client.post(f"/companies/{company_id}/members?user_id={member1['id']}&role=MEMBER", headers=owner["headers"])
+    client.post(f"/companies/{company_id}/members?user_id={member2['id']}&role=MEMBER", headers=owner["headers"])
+
+    # Create Company B for cross-company tests
+    cb_res = client.post("/companies", headers=outsider["headers"], json={"name": f"Other Corp {suffix}"})
+    company_b_id = cb_res.json()["id"]
+
+    # TEST 3: MEMBER attempts to remove another MEMBER -> 403 Forbidden
+    mem_rem_mem = client.delete(f"/companies/{company_id}/members/{member2['id']}", headers=member1["headers"])
+    assert mem_rem_mem.status_code == 403
+    assert "Members cannot remove" in mem_rem_mem.json()["detail"]
+
+    # TEST 4: Cross-company removal attempt -> 403 Forbidden
+    cross_rem = client.delete(f"/companies/{company_b_id}/members/{outsider['id']}", headers=owner["headers"])
+    assert cross_rem.status_code == 403
+    assert "You do not have access" in cross_rem.json()["detail"]
+
+    # Admin removal of non-existent member -> 404
+    fake_user_id = uuid.uuid4()
+    not_found_rem = client.delete(f"/companies/{company_id}/members/{fake_user_id}", headers=admin["headers"])
+    assert not_found_rem.status_code == 404
+
+    # Admin attempts to remove OWNER -> 403 Forbidden
+    adm_rem_owner = client.delete(f"/companies/{company_id}/members/{owner['id']}", headers=admin["headers"])
+    assert adm_rem_owner.status_code == 403
+    assert "Admins cannot remove company owners" in adm_rem_owner.json()["detail"]
+
+    # Self-removal via admin endpoint -> 400 Bad Request
+    self_rem = client.delete(f"/companies/{company_id}/members/{owner['id']}", headers=owner["headers"])
+    assert self_rem.status_code == 400
+    assert "You cannot remove yourself" in self_rem.json()["detail"]
+
+    # TEST 2: ADMIN removes MEMBER -> 200 Success
+    adm_rem_res = client.delete(f"/companies/{company_id}/members/{member1['id']}", headers=admin["headers"])
+    assert adm_rem_res.status_code == 200
+    assert "Member removed from company successfully" in adm_rem_res.json()["message"]
+
+    # Verify Member 1 is removed
+    members_list = client.get(f"/companies/{company_id}/members", headers=owner["headers"]).json()
+    assert not any(m["user_id"] == member1["id"] for m in members_list)
+
+    # TEST 1: OWNER removes MEMBER -> 200 Success
+    owner_rem_res = client.delete(f"/companies/{company_id}/members/{member2['id']}", headers=owner["headers"])
+    assert owner_rem_res.status_code == 200
+
+    # Verify Member 2 is removed
+    members_list2 = client.get(f"/companies/{company_id}/members", headers=owner["headers"]).json()
+    assert not any(m["user_id"] == member2["id"] for m in members_list2)
+
+
+def test_member_and_admin_leave_company():
+    """
+    Tests 5, 6, 7, 9:
+    - MEMBER leaves company -> Success
+    - ADMIN leaves company -> Success when owner remains
+    - Only OWNER attempts to leave -> Rejected 400
+    - Company has 2 OWNERS -> One leaves -> Exactly 1 remains -> Second cannot leave
+    """
+    suffix = uuid.uuid4().hex[:8]
+    owner1 = _create_and_login_user(f"own1_lv_{suffix}", "Owner One")
+    owner2 = _create_and_login_user(f"own2_lv_{suffix}", "Owner Two")
+    admin = _create_and_login_user(f"adm_lv_{suffix}", "Admin Bob")
+    member = _create_and_login_user(f"mem_lv_{suffix}", "Member Charlie")
+
+    c_res = client.post("/companies", headers=owner1["headers"], json={"name": f"Leave Corp {suffix}"})
+    company_id = c_res.json()["id"]
+
+    # Add Owner 2, Admin, Member
+    client.post(f"/companies/{company_id}/members?user_id={owner2['id']}&role=OWNER", headers=owner1["headers"])
+    client.post(f"/companies/{company_id}/members?user_id={admin['id']}&role=ADMIN", headers=owner1["headers"])
+    client.post(f"/companies/{company_id}/members?user_id={member['id']}&role=MEMBER", headers=owner1["headers"])
+
+    # TEST 5: MEMBER leaves company -> 200 Success
+    mem_leave = client.post(f"/companies/{company_id}/leave", headers=member["headers"])
+    assert mem_leave.status_code == 200
+    assert "Successfully left the company" in mem_leave.json()["message"]
+
+    # Verify Member is gone
+    members_list = client.get(f"/companies/{company_id}/members", headers=owner1["headers"]).json()
+    assert not any(m["user_id"] == member["id"] for m in members_list)
+
+    # TEST 6: ADMIN leaves company -> 200 Success
+    adm_leave = client.post(f"/companies/{company_id}/leave", headers=admin["headers"])
+    assert adm_leave.status_code == 200
+
+    # Verify Admin is gone
+    members_list2 = client.get(f"/companies/{company_id}/members", headers=owner1["headers"]).json()
+    assert not any(m["user_id"] == admin["id"] for m in members_list2)
+
+    # TEST 9: Company has two OWNERS. Owner 1 leaves -> 200 Success. Exactly one OWNER remains.
+    owner1_leave = client.post(f"/companies/{company_id}/leave", headers=owner1["headers"])
+    assert owner1_leave.status_code == 200
+
+    # Verify Owner 2 is the only member and only owner
+    members_list3 = client.get(f"/companies/{company_id}/members", headers=owner2["headers"]).json()
+    assert len(members_list3) == 1
+    assert members_list3[0]["user_id"] == owner2["id"]
+    assert members_list3[0]["role"] == "OWNER"
+
+    # TEST 7: Only OWNER attempts to leave -> Rejected with 400 Bad Request
+    owner2_leave = client.post(f"/companies/{company_id}/leave", headers=owner2["headers"])
+    assert owner2_leave.status_code == 400
+    assert "Cannot leave company as the only owner" in owner2_leave.json()["detail"]
+
+
+def test_team_cleanup_on_company_departure_and_cross_company_isolation():
+    """
+    Tests 10, 11:
+    - Removing a company member removes their team memberships in that company.
+    - User has teams in two companies: leaving Company A cleans up Company A teams, preserves Company B teams.
+    """
+    suffix = uuid.uuid4().hex[:8]
+    owner_a = _create_and_login_user(f"oa_{suffix}", "Owner A")
+    owner_b = _create_and_login_user(f"ob_{suffix}", "Owner B")
+    user = _create_and_login_user(f"u_{suffix}", "Multi-Company User")
+
+    # Create Company A and Company B
+    ca = client.post("/companies", headers=owner_a["headers"], json={"name": f"Company A {suffix}"}).json()
+    cb = client.post("/companies", headers=owner_b["headers"], json={"name": f"Company B {suffix}"}).json()
+    ca_id = ca["id"]
+    cb_id = cb["id"]
+    user_id = user["id"]
+
+    # Add user to Company A and Company B
+    client.post(f"/companies/{ca_id}/members?user_id={user_id}&role=MEMBER", headers=owner_a["headers"])
+    client.post(f"/companies/{cb_id}/members?user_id={user_id}&role=MEMBER", headers=owner_b["headers"])
+
+    # Create Team A1, Team A2 in Company A
+    t_a1 = client.post(f"/companies/{ca_id}/teams", headers=owner_a["headers"], json={"name": f"Team A1 {suffix}"}).json()
+    t_a2 = client.post(f"/companies/{ca_id}/teams", headers=owner_a["headers"], json={"name": f"Team A2 {suffix}"}).json()
+
+    # Create Team B1 in Company B
+    t_b1 = client.post(f"/companies/{cb_id}/teams", headers=owner_b["headers"], json={"name": f"Team B1 {suffix}"}).json()
+
+    # Add user to Team A1, Team A2, Team B1
+    client.post(f"/companies/{ca_id}/teams/{t_a1['id']}/members", headers=owner_a["headers"], json={"user_id": user_id, "role": "MEMBER"})
+    client.post(f"/companies/{ca_id}/teams/{t_a2['id']}/members", headers=owner_a["headers"], json={"user_id": user_id, "role": "MEMBER"})
+    client.post(f"/companies/{cb_id}/teams/{t_b1['id']}/members", headers=owner_b["headers"], json={"user_id": user_id, "role": "MEMBER"})
+
+    # Verify user is in Team A1, Team A2, Team B1
+    from app.models.team_member import TeamMember
+    from sqlalchemy import select
+    db = SessionLocal()
+    try:
+        tms = db.scalars(select(TeamMember).where(TeamMember.user_id == uuid.UUID(user_id))).all()
+        assert len(tms) == 3
+    finally:
+        db.close()
+
+    # User leaves Company A
+    leave_res = client.post(f"/companies/{ca_id}/leave", headers=user["headers"])
+    assert leave_res.status_code == 200
+
+    # TEST 10 & 11: Verify user removed from Team A1 & A2, but STILL in Team B1
+    db = SessionLocal()
+    try:
+        tms = db.scalars(select(TeamMember).where(TeamMember.user_id == uuid.UUID(user_id))).all()
+        assert len(tms) == 1
+        assert str(tms[0].team_id) == t_b1["id"]
+    finally:
+        db.close()
+
+
+def test_team_lead_leave_and_reassignment_rules():
+    """
+    Test 12:
+    - If user is the only LEAD in a team with multiple members, leaving is rejected (400)
+    - After leadership is reassigned (or second lead added), user leaves successfully
+    """
+    suffix = uuid.uuid4().hex[:8]
+    owner = _create_and_login_user(f"t_own_{suffix}", "Company Owner")
+    lead_user = _create_and_login_user(f"t_lead_{suffix}", "Team Lead")
+    sarah = _create_and_login_user(f"t_sarah_{suffix}", "Sarah Member")
+
+    c = client.post("/companies", headers=owner["headers"], json={"name": f"Lead Test Co {suffix}"}).json()
+    company_id = c["id"]
+
+    # Add lead_user and sarah to company
+    client.post(f"/companies/{company_id}/members?user_id={lead_user['id']}&role=MEMBER", headers=owner["headers"])
+    client.post(f"/companies/{company_id}/members?user_id={sarah['id']}&role=MEMBER", headers=owner["headers"])
+
+    # Create team with lead_user as LEAD and sarah as MEMBER
+    team = client.post(f"/companies/{company_id}/teams", headers=owner["headers"], json={"name": f"Eng Team {suffix}"}).json()
+    team_id = team["id"]
+    # Transfer team leadership to lead_user
+    client.post(f"/companies/{company_id}/teams/{team_id}/members", headers=owner["headers"], json={"user_id": lead_user["id"], "role": "MEMBER"})
+    client.post(f"/companies/{company_id}/teams/{team_id}/members", headers=owner["headers"], json={"user_id": sarah["id"], "role": "MEMBER"})
+    client.post(f"/companies/{company_id}/teams/{team_id}/transfer-leadership", headers=owner["headers"], json={"new_lead_user_id": lead_user["id"]})
+    # Remove owner from team so lead_user is the ONLY lead and sarah is member
+    client.delete(f"/companies/{company_id}/teams/{team_id}/members/{owner['id']}", headers=owner["headers"])
+
+    # Attempt to remove or leave company by lead_user -> 400 Bad Request
+    lead_leave = client.post(f"/companies/{company_id}/leave", headers=lead_user["headers"])
+    assert lead_leave.status_code == 400
+    assert "only lead of team" in lead_leave.json()["detail"]
+
+    # Now promote Sarah to LEAD
+    client.patch(f"/companies/{company_id}/teams/{team_id}/members/{sarah['id']}", headers=owner["headers"], json={"role": "LEAD"})
+
+    # Now lead_user leaves company -> 200 OK!
+    lead_leave2 = client.post(f"/companies/{company_id}/leave", headers=lead_user["headers"])
+    assert lead_leave2.status_code == 200
+
+
+def test_concurrent_last_owner_leave_and_removal_race_condition():
+    """
+    Test 13:
+    Company starts with 2 owners.
+    Two concurrent leave requests arrive at the same time.
+    Database row-level locking ensures exactly ONE succeeds and the other is rejected with 400.
+    The company NEVER ends up with 0 owners.
+    """
+    suffix = uuid.uuid4().hex[:8]
+    owner1 = _create_and_login_user(f"c_o1_{suffix}", "Concurrent Owner 1")
+    owner2 = _create_and_login_user(f"c_o2_{suffix}", "Concurrent Owner 2")
+
+    c = client.post("/companies", headers=owner1["headers"], json={"name": f"Race Corp {suffix}"}).json()
+    company_id = uuid.UUID(c["id"])
+    owner1_id = uuid.UUID(owner1["id"])
+    owner2_id = uuid.UUID(owner2["id"])
+
+    # Add owner2 as OWNER
+    client.post(f"/companies/{company_id}/members?user_id={owner2['id']}&role=OWNER", headers=owner1["headers"])
+
+    from app.services.company import leave_company_service
+    from app.repositories.company import count_company_owners
+
+    barrier = Barrier(2)
+    results = []
+
+    def concurrent_leave_worker(user_id):
+        thread_db = SessionLocal()
+        try:
+            barrier.wait()
+            res = leave_company_service(db=thread_db, company_id=company_id, user_id=user_id)
+            return {"status": "success", "result": res}
+        except HTTPException as exc:
+            return {"status": "http_error", "status_code": exc.status_code, "detail": exc.detail}
+        except Exception as exc:
+            return {"status": "error", "exception": str(exc)}
+        finally:
+            thread_db.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(concurrent_leave_worker, owner1_id)
+        f2 = executor.submit(concurrent_leave_worker, owner2_id)
+        results = [f1.result(), f2.result()]
+
+    successes = [r for r in results if r["status"] == "success"]
+    rejections = [r for r in results if r["status"] == "http_error"]
+    errors = [r for r in results if r["status"] == "error"]
+
+    assert len(errors) == 0, f"Unexpected unhandled errors: {errors}"
+    assert len(successes) == 1, f"Expected exactly 1 success, got {len(successes)}: {results}"
+    assert len(rejections) == 1, f"Expected exactly 1 rejection, got {len(rejections)}: {results}"
+    assert rejections[0]["status_code"] == 400
+    assert "only owner" in rejections[0]["detail"]
+
+    # Verify DB: exactly 1 OWNER remains in company
+    verify_db = SessionLocal()
+    try:
+        remaining_owners = count_company_owners(verify_db, company_id)
+        assert remaining_owners == 1
+    finally:
+        verify_db.close()
+
+
+
