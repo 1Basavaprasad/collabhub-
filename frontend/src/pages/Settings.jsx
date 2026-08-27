@@ -78,7 +78,7 @@ const Settings = () => {
   ];
 
   return (
-    <div className="h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
+    <div className="h-screen bg-[#F4F6FA] dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
       {/* Top Navbar */}
       <Navbar onToggleSidebar={() => setSidebarOpen((prev) => !prev)} />
 

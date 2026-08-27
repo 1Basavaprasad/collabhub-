@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
@@ -13,8 +13,11 @@ import Badge from '../components/Badge';
 import Modal from '../components/Modal';
 import Avatar, { getDisplayName } from '../components/Avatar';
 import { useToast } from '../components/Toast';
+import { useTask } from '../context/TaskContext';
+import KanbanBoard from '../components/kanban/KanbanBoard';
 import { getCompanyTeamsApi } from '../api/teamApi';
 import { getCompanyMembersApi } from '../api/companyApi';
+import { getProjectActivityApi } from '../api/projectApi';
 import {
   FolderKanban,
   Plus,
@@ -52,6 +55,13 @@ import {
   UserMinus,
   ShieldCheck,
   Info,
+  LayoutDashboard,
+  Kanban,
+  Activity,
+  CheckCircle2,
+  Flag,
+  ArrowRightLeft,
+  RefreshCw,
 } from 'lucide-react';
 
 // Visual Identity Icon Map
@@ -90,6 +100,89 @@ const getIconComponent = (iconId) => {
 const getColorClasses = (colorId) => {
   const item = COLOR_OPTIONS.find((c) => c.id === colorId);
   return item || COLOR_OPTIONS[0];
+};
+
+const formatActivityTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const getActivityGroupKey = (dateStr) => {
+  if (!dateStr) return 'Earlier';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return 'Earlier';
+  const now = new Date();
+
+  if (d.toDateString() === now.toDateString()) {
+    return 'Today';
+  }
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  }
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
+};
+
+const getActivityIconConfig = (action) => {
+  switch (action) {
+    case 'TASK_CREATED':
+      return {
+        icon: Plus,
+        bg: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200/80 dark:border-indigo-800/40',
+      };
+    case 'TASK_ASSIGNED':
+      return {
+        icon: UserPlus,
+        bg: 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border-purple-200/80 dark:border-purple-800/40',
+      };
+    case 'TASK_UNASSIGNED':
+      return {
+        icon: UserMinus,
+        bg: 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200/80 dark:border-amber-800/40',
+      };
+    case 'TASK_STATUS_CHANGED':
+      return {
+        icon: ArrowRightLeft,
+        bg: 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border-blue-200/80 dark:border-blue-800/40',
+      };
+    case 'TASK_COMPLETED':
+      return {
+        icon: CheckCircle2,
+        bg: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-800/40',
+      };
+    case 'TASK_PRIORITY_CHANGED':
+      return {
+        icon: Flag,
+        bg: 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200/80 dark:border-amber-800/40',
+      };
+    case 'TASK_DUE_DATE_CHANGED':
+      return {
+        icon: Calendar,
+        bg: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200/80 dark:border-indigo-800/40',
+      };
+    case 'TASK_UPDATED':
+      return {
+        icon: Edit2,
+        bg: 'bg-slate-100 dark:bg-[#1B283F] text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-[#263449]',
+      };
+    case 'TASK_DELETED':
+      return {
+        icon: Trash2,
+        bg: 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200/80 dark:border-rose-800/40',
+      };
+    default:
+      return {
+        icon: Activity,
+        bg: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200/80 dark:border-indigo-800/40',
+      };
+  }
 };
 
 const Projects = () => {
@@ -132,6 +225,12 @@ const Projects = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | active | archived
 
+  // Project Detail Tab State ('tasks' | 'overview' | 'people' | 'activity')
+  const [activeProjectTab, setActiveProjectTab] = useState('tasks');
+
+  // Task Context
+  const { tasks, loadTasks } = useTask();
+
   // Action Menu State
   const [actionMenuOpenId, setActionMenuOpenId] = useState(null);
 
@@ -168,7 +267,6 @@ const Projects = () => {
   const [loadingAvailableMembers, setLoadingAvailableMembers] = useState(false);
 
   // Details Page Filter State
-  const [memberViewFilter, setMemberViewFilter] = useState('all'); // all | direct | team
   const [memberListSearch, setMemberListSearch] = useState('');
   const [teamListSearch, setTeamListSearch] = useState('');
 
@@ -187,14 +285,45 @@ const Projects = () => {
     return canManageCompany || currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
   }, [canManageCompany, currentUserRole]);
 
-  // Load single project details when route parameter is present
+  // Project Activity State
+  const [activities, setActivities] = useState([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [activitiesError, setActivitiesError] = useState(null);
+
+  const fetchProjectActivities = useCallback(async (projId) => {
+    const targetId = projId || selectedProject?.id || routeProjectId;
+    if (!company?.id || !targetId) return;
+    setActivitiesLoading(true);
+    setActivitiesError(null);
+    try {
+      const res = await getProjectActivityApi(company.id, targetId, { limit: 100 });
+      setActivities(res?.items || []);
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Failed to load project activity timeline.';
+      setActivitiesError(msg);
+    } finally {
+      setActivitiesLoading(false);
+    }
+  }, [company?.id, selectedProject?.id, routeProjectId]);
+
+  // Load activity when tab changes to activity or routeProjectId changes
+  useEffect(() => {
+    if (activeProjectTab === 'activity' && (selectedProject?.id || routeProjectId)) {
+      fetchProjectActivities(selectedProject?.id || routeProjectId);
+    }
+  }, [activeProjectTab, selectedProject?.id, routeProjectId, fetchProjectActivities]);
+
+  // Load single project details and tasks when route parameter is present
   useEffect(() => {
     if (routeProjectId) {
       loadProject(routeProjectId);
+      if (company?.id) {
+        loadTasks(company.id, routeProjectId);
+      }
     } else {
       setSelectedProject(null);
     }
-  }, [routeProjectId, loadProject, setSelectedProject]);
+  }, [routeProjectId, company?.id, loadProject, loadTasks, setSelectedProject]);
 
   // Scroll to top on view changes
   useEffect(() => {
@@ -242,43 +371,20 @@ const Projects = () => {
     });
   }, [projects, statusFilter, searchQuery]);
 
-  // Direct vs Team member counts in Project Detail
-  const directMembersCount = useMemo(() => {
-    return effectiveMembers.filter(
-      (m) => m.source_type === 'direct' || m.source_type === 'both'
-    ).length;
-  }, [effectiveMembers]);
-
-  const teamMembersCount = useMemo(() => {
-    return effectiveMembers.filter(
-      (m) => m.source_type === 'team' || m.source_type === 'both'
-    ).length;
-  }, [effectiveMembers]);
-
-  // Filtered effective members for Project Detail view
+  // Filtered people with project access for Project Detail view
   const displayMembers = useMemo(() => {
+    if (!Array.isArray(effectiveMembers)) return [];
+    if (!memberListSearch.trim()) return effectiveMembers;
+    const q = memberListSearch.toLowerCase().trim();
     return effectiveMembers.filter((m) => {
-      // Tab filter
-      if (memberViewFilter === 'direct' && m.source_type !== 'direct' && m.source_type !== 'both') {
-        return false;
-      }
-      if (memberViewFilter === 'team' && m.source_type !== 'team' && m.source_type !== 'both') {
-        return false;
-      }
-
-      // Search query filter
-      if (memberListSearch.trim()) {
-        const q = memberListSearch.toLowerCase().trim();
-        const nameMatch = (m.full_name || '').toLowerCase().includes(q);
-        const usernameMatch = (m.username || '').toLowerCase().includes(q);
-        const emailMatch = (m.email || '').toLowerCase().includes(q);
-        const teamMatch = (m.team_names || []).some((tn) => tn.toLowerCase().includes(q));
-        if (!nameMatch && !usernameMatch && !emailMatch && !teamMatch) return false;
-      }
-
-      return true;
+      const nameMatch = (m.full_name || '').toLowerCase().includes(q);
+      const usernameMatch = (m.username || '').toLowerCase().includes(q);
+      const emailMatch = (m.email || '').toLowerCase().includes(q);
+      const desigMatch = (m.designation || '').toLowerCase().includes(q);
+      const teamMatch = (m.team_names || []).some((tn) => tn.toLowerCase().includes(q));
+      return nameMatch || usernameMatch || emailMatch || desigMatch || teamMatch;
     });
-  }, [effectiveMembers, memberViewFilter, memberListSearch]);
+  }, [effectiveMembers, memberListSearch]);
 
   // Filtered assigned teams for Project Detail view
   const displayTeams = useMemo(() => {
@@ -586,16 +692,16 @@ const Projects = () => {
         : (selectedMemberToAdd.full_name || selectedMemberToAdd.username || 'Member');
       addToast({
         type: 'success',
-        title: 'Member Added',
-        message: `"${displayName}" added as direct project member.`,
+        title: 'Person Added',
+        message: `"${displayName}" was granted direct access to this project.`,
       });
       setAddMemberModalOpen(false);
       setSelectedMemberToAdd(null);
     } catch (err) {
       addToast({
         type: 'error',
-        title: 'Failed to Add Member',
-        message: err.message || 'Unable to add member to this project.',
+        title: 'Failed to Add Person',
+        message: err.message || 'Unable to add person to this project.',
       });
     } finally {
       setMemberSubmitting(false);
@@ -638,16 +744,16 @@ const Projects = () => {
       await removeProjectMember(routeProjectId, userId);
       addToast({
         type: 'success',
-        title: 'Direct Member Removed',
-        message: `Direct membership for "${memberName}" was removed.`,
+        title: 'Person Removed',
+        message: `Direct access for "${memberName}" was removed.`,
       });
       setRemoveMemberModalOpen(false);
       setTargetMemberToRemove(null);
     } catch (err) {
       addToast({
         type: 'error',
-        title: 'Failed to Remove Member',
-        message: err.message || 'Unable to remove direct member.',
+        title: 'Failed to Remove Person',
+        message: err.message || 'Unable to remove direct access.',
       });
     } finally {
       setMemberSubmitting(false);
@@ -677,456 +783,604 @@ const Projects = () => {
     const colorClasses = getColorClasses(activeProject?.color);
 
     return (
-      <div className="h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] overflow-hidden selection:bg-indigo-500 selection:text-white">
+      <div className="h-screen bg-[#F4F6FA] dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] overflow-hidden selection:bg-indigo-500 selection:text-white">
         <Navbar onMenuClick={() => setSidebarOpen(true)} />
 
         <div className="flex-1 flex overflow-hidden">
           <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
           <main ref={mainScrollRef} className="flex-1 overflow-y-auto min-w-0">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 sm:py-4 space-y-3.5">
               {/* Top Navigation & Breadcrumb */}
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-3 text-xs">
                 <button
                   type="button"
                   onClick={() => navigate('/projects')}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-[#94A3B8] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 font-medium text-slate-500 dark:text-[#94A3B8] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className="h-3.5 w-3.5" />
                   <span>Back to Projects</span>
                 </button>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 dark:text-[#64748B]">Projects</span>
-                  <ChevronRight className="h-3 w-3 text-slate-400 dark:text-[#64748B]" />
-                  <span className="text-xs font-medium text-slate-900 dark:text-[#F8FAFC] truncate max-w-xs">
+                <div className="flex items-center gap-1.5 text-slate-400 dark:text-[#64748B]">
+                  <span>Projects</span>
+                  <ChevronRight className="h-3 w-3 text-slate-400" />
+                  <span className="font-medium text-slate-700 dark:text-[#CBD5E1] truncate max-w-xs">
                     {activeProject?.name || 'Project Details'}
                   </span>
                 </div>
               </div>
 
               {projectDetailLoading ? (
-                <div className="flex flex-col items-center justify-center py-24 space-y-3">
-                  <div className="h-8 w-8 animate-spin rounded-full border-3 border-indigo-600 border-t-transparent" />
+                <div className="flex flex-col items-center justify-center py-20 space-y-2.5">
+                  <div className="h-7 w-7 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
                   <p className="text-xs text-slate-500 dark:text-[#94A3B8]">Loading project details...</p>
                 </div>
               ) : !activeProject ? (
-                <Card className="p-12 text-center">
-                  <div className="mx-auto h-12 w-12 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-500 flex items-center justify-center mb-4">
-                    <AlertTriangle className="h-6 w-6" />
+                <Card className="p-10 text-center">
+                  <div className="mx-auto h-10 w-10 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-500 flex items-center justify-center mb-3">
+                    <AlertTriangle className="h-5 w-5" />
                   </div>
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-[#F8FAFC]">Project Not Found</h3>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">Project Not Found</h3>
                   <p className="mt-1 text-xs text-slate-500 dark:text-[#94A3B8] max-w-md mx-auto">
                     The requested project does not exist or has been removed from this workspace.
                   </p>
                   <Button
                     variant="primary"
-                    size="sm"
-                    className="mt-6"
+                    size="xs"
+                    className="mt-4"
                     onClick={() => navigate('/projects')}
                   >
                     Return to Projects
                   </Button>
                 </Card>
               ) : (
-                <div className="space-y-6 animate-fade-in">
-                  {/* Hero / Header Card */}
-                  <Card className="p-6">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                      <div className="flex items-start gap-4">
+                <div className="space-y-3.5 animate-fade-in">
+                  {/* Compact Professional Project Header */}
+                  <div className="bg-white dark:bg-[#131D2E] rounded-xl border border-slate-200/80 dark:border-[#202C3F] px-4 py-3 sm:px-5 sm:py-3.5 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      {/* Left: Icon + Title + Status + Meta */}
+                      <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`h-14 w-14 rounded-xl ${colorClasses.bg} text-white flex items-center justify-center shrink-0 shadow-md`}
+                          className={`h-9.5 w-9.5 rounded-lg ${colorClasses.bg} text-white flex items-center justify-center shrink-0 shadow-2xs`}
                         >
-                          <IconComp className="h-7 w-7" />
+                          <IconComp className="h-5 w-5" />
                         </div>
 
-                        <div className="space-y-1.5">
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            <h1 className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC]">
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h1 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
                               {activeProject.name}
                             </h1>
                             <Badge
                               variant={activeProject.status === 'ACTIVE' ? 'success' : 'neutral'}
-                              size="sm"
+                              size="xs"
                               dot
                             >
                               {activeProject.status}
                             </Badge>
                           </div>
 
-                          <p className="text-xs text-slate-500 dark:text-[#94A3B8] max-w-2xl leading-relaxed">
-                            {activeProject.description || 'No description provided for this project.'}
-                          </p>
+                          <div className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-[#94A3B8] flex-wrap">
+                            {activeProject.description && (
+                              <>
+                                <span className="truncate max-w-sm text-slate-600 dark:text-[#CBD5E1]">
+                                  {activeProject.description}
+                                </span>
+                                <span>•</span>
+                              </>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              {effectiveMembers.length} {effectiveMembers.length === 1 ? 'member' : 'members'}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <CheckSquare className="h-3 w-3" />
+                              {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
                       {/* Header Actions */}
                       {canManageProjects && (
-                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
                           <Button
                             variant="secondary"
-                            size="sm"
+                            size="xs"
                             onClick={() => handleOpenEditModal(activeProject)}
-                            className="inline-flex items-center gap-1.5"
+                            className="inline-flex items-center gap-1"
                           >
-                            <Edit2 className="h-3.5 w-3.5" />
-                            <span>Edit Project</span>
+                            <Edit2 className="h-3 w-3" />
+                            <span>Edit</span>
                           </Button>
 
                           {activeProject.status === 'ACTIVE' ? (
                             <Button
                               variant="secondary"
-                              size="sm"
+                              size="xs"
                               onClick={() => {
                                 setTargetProject(activeProject);
                                 setArchiveModalOpen(true);
                               }}
-                              className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                              className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
                             >
-                              <Archive className="h-3.5 w-3.5" />
+                              <Archive className="h-3 w-3" />
                               <span>Archive</span>
                             </Button>
                           ) : (
                             <Button
                               variant="secondary"
-                              size="sm"
+                              size="xs"
                               onClick={() => {
                                 setTargetProject(activeProject);
                                 setRestoreModalOpen(true);
                               }}
-                              className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                              className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
                             >
-                              <RotateCcw className="h-3.5 w-3.5" />
+                              <RotateCcw className="h-3 w-3" />
                               <span>Restore</span>
                             </Button>
                           )}
 
                           <Button
                             variant="danger"
-                            size="sm"
+                            size="xs"
                             onClick={() => {
                               setTargetProject(activeProject);
                               setDeleteModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-1.5"
+                            className="inline-flex items-center gap-1"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-3 w-3" />
                             <span>Delete</span>
                           </Button>
                         </div>
                       )}
                     </div>
-                  </Card>
+                  </div>
 
-                  {/* Metadata and Details Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Project Overview Metadata */}
-                    <Card className="p-5 space-y-4">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] font-mono">
-                        Project Overview
-                      </h3>
+                  {/* Project Detail Tab Navigation Bar */}
+                  <div className="flex items-center gap-1 border-b border-slate-200/80 dark:border-[#202C3F] pb-px">
+                    <button
+                      type="button"
+                      onClick={() => setActiveProjectTab('overview')}
+                      className={`px-3.5 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                        activeProjectTab === 'overview'
+                          ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-white/70 dark:bg-[#131D2E]/70 shadow-2xs'
+                          : 'border-transparent text-slate-500 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/50 dark:hover:bg-[#131D2E]/30'
+                      }`}
+                    >
+                      <LayoutDashboard className="h-3.5 w-3.5" />
+                      <span>Overview</span>
+                    </button>
 
-                      <div className="space-y-3.5 text-xs">
-                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-[#263449]">
-                          <span className="text-slate-500 dark:text-[#94A3B8]">Workspace</span>
-                          <span className="font-semibold text-slate-900 dark:text-[#F8FAFC] flex items-center gap-1">
-                            <Building2 className="h-3.5 w-3.5 text-indigo-500" />
-                            {company?.name || 'Workspace'}
-                          </span>
-                        </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveProjectTab('tasks')}
+                      className={`px-3.5 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                        activeProjectTab === 'tasks'
+                          ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-white/70 dark:bg-[#131D2E]/70 shadow-2xs'
+                          : 'border-transparent text-slate-500 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/50 dark:hover:bg-[#131D2E]/30'
+                      }`}
+                    >
+                      <Kanban className="h-3.5 w-3.5" />
+                      <span>Tasks</span>
+                      {tasks.length > 0 && (
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
+                          {tasks.length}
+                        </span>
+                      )}
+                    </button>
 
-                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-[#263449]">
-                          <span className="text-slate-500 dark:text-[#94A3B8]">Created Date</span>
-                          <span className="font-medium text-slate-800 dark:text-[#E2E8F0] flex items-center gap-1">
-                            <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                            {formatDate(activeProject.created_at)}
-                          </span>
-                        </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveProjectTab('people')}
+                      className={`px-3.5 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                        activeProjectTab === 'people'
+                          ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-white/70 dark:bg-[#131D2E]/70 shadow-2xs'
+                          : 'border-transparent text-slate-500 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/50 dark:hover:bg-[#131D2E]/30'
+                      }`}
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      <span>People</span>
+                      {effectiveMembers.length > 0 && (
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-[#182337] text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-[#223046]">
+                          {effectiveMembers.length}
+                        </span>
+                      )}
+                    </button>
 
-                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-[#263449]">
-                          <span className="text-slate-500 dark:text-[#94A3B8]">Last Updated</span>
-                          <span className="font-medium text-slate-800 dark:text-[#E2E8F0] flex items-center gap-1">
-                            <Clock className="h-3.5 w-3.5 text-slate-400" />
-                            {formatDate(activeProject.updated_at)}
-                          </span>
-                        </div>
-
-                        {activeProject.archived_at && (
-                          <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-[#263449]">
-                            <span className="text-amber-500 font-medium">Archived At</span>
-                            <span className="font-medium text-amber-600 dark:text-amber-400">
-                              {formatDate(activeProject.archived_at)}
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="pt-2">
-                          <span className="text-slate-500 dark:text-[#94A3B8] block mb-2">Project Creator</span>
-                          {activeProject.creator ? (
-                            <div className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-[#151F32] border border-slate-100 dark:border-[#263449]">
-                              <Avatar user={activeProject.creator} size="xs" variant="indigo-solid" />
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
-                                  {getDisplayName(activeProject.creator)}
-                                </p>
-                                <p className="text-[11px] text-slate-400 dark:text-[#94A3B8] truncate font-mono">
-                                  {activeProject.creator.email}
-                                </p>
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 italic">Workspace Member</span>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-
-                    {/* Deliverables / Tasks Workspace Preview */}
-                    <Card className="md:col-span-2 p-6 flex flex-col justify-between">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CheckSquare className="h-4 w-4 text-indigo-500" />
-                            <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
-                              Deliverables & Task Boards
-                            </h3>
-                          </div>
-                          <span className="text-[10px] font-mono uppercase bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded font-semibold border border-indigo-100 dark:border-indigo-900/30">
-                            Upcoming Module
-                          </span>
-                        </div>
-
-                        <p className="text-xs text-slate-500 dark:text-[#94A3B8] leading-relaxed">
-                          The Tasks module foundation is integrated with this Project workspace. Task boards, deliverable assignees, milestone tracking, and sprint metrics for <strong className="text-slate-700 dark:text-slate-300">{activeProject.name}</strong> will be managed here.
-                        </p>
-                      </div>
-
-                      <div className="mt-6 p-6 rounded-xl border border-dashed border-slate-200 dark:border-[#263449] bg-slate-50/50 dark:bg-[#151F32]/50 text-center space-y-2">
-                        <div className="mx-auto h-10 w-10 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                          <CheckSquare className="h-5 w-5" />
-                        </div>
-                        <p className="text-xs font-semibold text-slate-800 dark:text-[#F8FAFC]">
-                          Tasks & Board Workflow
-                        </p>
-                        <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] max-w-sm mx-auto">
-                          Ready for subsequent phase: Kanban columns, task prioritization, due dates, and member assignments.
-                        </p>
-                      </div>
-                    </Card>
+                    <button
+                      type="button"
+                      onClick={() => setActiveProjectTab('activity')}
+                      className={`px-3.5 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                        activeProjectTab === 'activity'
+                          ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-white/70 dark:bg-[#131D2E]/70 shadow-2xs'
+                          : 'border-transparent text-slate-500 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/50 dark:hover:bg-[#131D2E]/30'
+                      }`}
+                    >
+                      <Activity className="h-3.5 w-3.5" />
+                      <span>Activity</span>
+                    </button>
                   </div>
 
                   {/* ============================================================ */}
-                  {/* TEAM & MEMBERS MANAGEMENT SECTION                            */}
+                  {/* TAB 1: KANBAN TASKS BOARD                                    */}
                   {/* ============================================================ */}
-                  <div className="space-y-4 pt-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC] flex items-center gap-2">
-                          <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                          <span>Team & Members</span>
-                        </h2>
-                        <p className="text-xs text-slate-500 dark:text-[#94A3B8]">
-                          Manage workspace teams and direct collaborators assigned to this project.
-                        </p>
-                      </div>
+                  {activeProjectTab === 'tasks' && (
+                    <div className="animate-fade-in">
+                      <KanbanBoard
+                        companyId={company?.id}
+                        projectId={activeProject.id}
+                        effectiveMembers={effectiveMembers}
+                        canManage={canManageProjects}
+                      />
                     </div>
+                  )}
 
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                      {/* ======================================== */}
-                      {/* COLUMN 1: ASSIGNED TEAMS (5 cols on lg)  */}
-                      {/* ======================================== */}
-                      <Card className="lg:col-span-5 p-5 flex flex-col space-y-4">
-                        <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-[#263449]">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
-                              Assigned Teams
-                            </h3>
-                            <Badge variant="indigo" size="xs">
-                              {projectTeams.length}
-                            </Badge>
-                          </div>
+                  {/* ============================================================ */}
+                  {/* TAB 2: OVERVIEW                                              */}
+                  {/* ============================================================ */}
+                  {activeProjectTab === 'overview' && (
+                    <div className="space-y-6 animate-fade-in">
+                      {/* Metadata and Details Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Project Overview Metadata */}
+                        <Card className="p-5 space-y-4">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] font-mono">
+                            Project Overview
+                          </h3>
 
-                          {canManageProjects && (
-                            <Button
-                              variant="primary"
-                              size="xs"
-                              onClick={handleOpenAddTeamModal}
-                              className="inline-flex items-center gap-1 shadow-2xs"
-                            >
-                              <Plus className="h-3 w-3" />
-                              <span>Add Team</span>
-                            </Button>
-                          )}
-                        </div>
+                          <div className="space-y-3.5 text-xs">
+                            <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-[#263449]">
+                              <span className="text-slate-500 dark:text-[#94A3B8]">Workspace</span>
+                              <span className="font-semibold text-slate-900 dark:text-[#F8FAFC] flex items-center gap-1">
+                                <Building2 className="h-3.5 w-3.5 text-indigo-500" />
+                                {company?.name || 'Workspace'}
+                              </span>
+                            </div>
 
-                        {/* Search in Teams if more than 3 teams */}
-                        {projectTeams.length > 3 && (
-                          <div className="relative">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
-                            <input
-                              type="text"
-                              value={teamListSearch}
-                              onChange={(e) => setTeamListSearch(e.target.value)}
-                              placeholder="Filter assigned teams..."
-                              className="w-full pl-8 pr-7 py-1 bg-slate-50 dark:bg-[#151F32] border border-slate-200 dark:border-[#263449] rounded-md text-xs text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            />
-                            {teamListSearch && (
-                              <button
-                                type="button"
-                                onClick={() => setTeamListSearch('')}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
+                            <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-[#263449]">
+                              <span className="text-slate-500 dark:text-[#94A3B8]">Created Date</span>
+                              <span className="font-medium text-slate-800 dark:text-[#E2E8F0] flex items-center gap-1">
+                                <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                                {formatDate(activeProject.created_at)}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-[#263449]">
+                              <span className="text-slate-500 dark:text-[#94A3B8]">Last Updated</span>
+                              <span className="font-medium text-slate-800 dark:text-[#E2E8F0] flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                                {formatDate(activeProject.updated_at)}
+                              </span>
+                            </div>
+
+                            {activeProject.archived_at && (
+                              <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-[#263449]">
+                                <span className="text-amber-500 font-medium">Archived At</span>
+                                <span className="font-medium text-amber-600 dark:text-amber-400">
+                                  {formatDate(activeProject.archived_at)}
+                                </span>
+                              </div>
                             )}
-                          </div>
-                        )}
 
-                        {/* Teams Content Body */}
-                        {teamsLoading ? (
-                          <div className="space-y-3 py-2">
-                            {[1, 2].map((idx) => (
-                              <div key={idx} className="p-3 rounded-lg border border-slate-100 dark:border-[#263449] animate-pulse flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2.5 flex-1">
-                                  <div className="h-9 w-9 rounded-lg bg-slate-200 dark:bg-[#1B263A]" />
-                                  <div className="space-y-1.5 flex-1">
-                                    <div className="h-3.5 w-24 bg-slate-200 dark:bg-[#1B263A] rounded" />
-                                    <div className="h-2.5 w-16 bg-slate-200 dark:bg-[#1B263A] rounded" />
+                            <div className="pt-2">
+                              <span className="text-slate-500 dark:text-[#94A3B8] block mb-2">Project Creator</span>
+                              {activeProject.creator ? (
+                                <div className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-[#151F32] border border-slate-100 dark:border-[#263449]">
+                                  <Avatar user={activeProject.creator} size="xs" variant="indigo-solid" />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
+                                      {getDisplayName(activeProject.creator)}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 dark:text-[#94A3B8] truncate font-mono">
+                                      {activeProject.creator.email}
+                                    </p>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : projectTeams.length === 0 ? (
-                          <div className="py-8 text-center space-y-2.5">
-                            <div className="mx-auto h-10 w-10 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                              <Users className="h-5 w-5" />
+                              ) : (
+                                <span className="text-slate-400 italic">Workspace Member</span>
+                              )}
                             </div>
-                            <p className="text-xs font-semibold text-slate-800 dark:text-[#F8FAFC]">
-                              No teams assigned to this project yet.
-                            </p>
-                            <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] max-w-xs mx-auto">
-                              Assigning a workspace team automatically grants all its members access to this project.
-                            </p>
-                            {canManageProjects && (
+                          </div>
+                        </Card>
+
+                        {/* Deliverables / Kanban Snapshot Card */}
+                        <Card className="md:col-span-2 p-6 flex flex-col justify-between space-y-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Kanban className="h-4 w-4 text-indigo-500" />
+                                <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                                  Tasks & Kanban Workflow
+                                </h3>
+                              </div>
                               <Button
                                 variant="secondary"
                                 size="xs"
+                                onClick={() => setActiveProjectTab('tasks')}
+                              >
+                                View Kanban Board →
+                              </Button>
+                            </div>
+
+                            <p className="text-xs text-slate-500 dark:text-[#94A3B8] leading-relaxed">
+                              Track deliverables, assignments, priorities, and status progression for <strong className="text-slate-700 dark:text-slate-300">{activeProject.name}</strong>.
+                            </p>
+
+                            {/* Task Completion Progress */}
+                            {tasks.length > 0 && (() => {
+                              const doneCount = tasks.filter((t) => t.status === 'DONE').length;
+                              const percent = Math.round((doneCount / tasks.length) * 100);
+                              return (
+                                <div className="space-y-1.5 pt-1">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-slate-500 dark:text-[#94A3B8] font-medium">Completion Progress</span>
+                                    <span className="font-mono font-bold text-slate-900 dark:text-[#F8FAFC]">{percent}% ({doneCount}/{tasks.length})</span>
+                                  </div>
+                                  <div className="h-2 w-full bg-slate-100 dark:bg-[#1E293B] rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-indigo-600 dark:bg-indigo-500 rounded-full transition-all duration-500"
+                                      style={{ width: `${percent}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* Task Metrics Row */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#151F32] border border-slate-100 dark:border-[#263449] text-center">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">To Do</span>
+                              <p className="text-lg font-bold text-slate-800 dark:text-[#F8FAFC] mt-0.5">
+                                {tasks.filter((t) => t.status === 'TODO').length}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/30 text-center">
+                              <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 tracking-wider">In Progress</span>
+                              <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300 mt-0.5">
+                                {tasks.filter((t) => t.status === 'IN_PROGRESS').length}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/30 text-center">
+                              <span className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 tracking-wider">Review</span>
+                              <p className="text-lg font-bold text-amber-700 dark:text-amber-300 mt-0.5">
+                                {tasks.filter((t) => t.status === 'REVIEW').length}
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/30 text-center">
+                              <span className="text-[10px] uppercase font-bold text-emerald-600 dark:emerald-400 tracking-wider">Done</span>
+                              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                                {tasks.filter((t) => t.status === 'DONE').length}
+                              </p>
+                            </div>
+                          </div>
+                        </Card>
+                      </div>
+
+                      {/* People Summary Glance Card */}
+                      <Card className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                            <Users className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                              Team & Project Contributors ({effectiveMembers.length})
+                            </h4>
+                            <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] mt-0.5">
+                              {projectTeams.length} teams assigned • {effectiveMembers.length} active contributors with workspace access
+                            </p>
+                          </div>
+                        </div>
+
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          onClick={() => setActiveProjectTab('people')}
+                        >
+                          Manage in People tab →
+                        </Button>
+                      </Card>
+                    </div>
+                  )}
+
+                  {/* ============================================================ */}
+                  {/* TAB 3: PEOPLE & TEAMS                                        */}
+                  {/* ============================================================ */}
+                  {activeProjectTab === 'people' && (
+                    <div className="space-y-6 animate-fade-in">
+                      {/* Section Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-[#F8FAFC] tracking-tight flex items-center gap-2">
+                              <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                              <span>People working on this project</span>
+                            </h2>
+                            <div className="relative group/help flex items-center">
+                              <button
+                                type="button"
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-0.5 rounded-full focus:outline-none cursor-pointer"
+                                title="Assigning a team gives all of its members access to this project. You can also add people individually."
+                                aria-label="Access explanation"
+                              >
+                                <Info className="h-4 w-4" />
+                              </button>
+                              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/help:block w-72 p-2.5 bg-slate-900 dark:bg-[#1E293B] text-white text-[11px] leading-relaxed rounded-lg shadow-xl border border-slate-700/50 z-30 pointer-events-none">
+                                Assigning a team gives all of its members access to this project. You can also add people individually.
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-[#1E293B]" />
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-[#94A3B8] mt-0.5">
+                            Add a team to give all its members access, or add people individually.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Two-Column Balanced Card Layout */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                        {/* ========================================================= */}
+                        {/* CARD 1: TEAMS ASSIGNED TO THIS PROJECT                    */}
+                        {/* ========================================================= */}
+                        <Card className="p-5 sm:p-6 flex flex-col space-y-4 shadow-xs">
+                          <div className="flex items-center justify-between gap-3 pb-3.5 border-b border-slate-100 dark:border-[#263449]">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                                Teams assigned to this project
+                              </h3>
+                              <Badge variant="indigo" size="xs">
+                                {projectTeams.length}
+                              </Badge>
+                            </div>
+
+                            {canManageProjects && (
+                              <Button
+                                variant="primary"
+                                size="xs"
                                 onClick={handleOpenAddTeamModal}
-                                className="mt-2 inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400"
+                                className="inline-flex items-center gap-1 shadow-2xs"
                               >
                                 <Plus className="h-3 w-3" />
-                                <span>Add Team</span>
+                                <span>Assign Team</span>
                               </Button>
                             )}
                           </div>
-                        ) : displayTeams.length === 0 ? (
-                          <p className="text-xs text-slate-400 text-center py-6">
-                            No teams matched "{teamListSearch}".
-                          </p>
-                        ) : (
-                          <div className="divide-y divide-slate-100 dark:divide-[#263449]">
-                            {displayTeams.map((pt) => {
-                              const t = pt.team;
-                              const teamColor = getColorClasses(t?.color || 'indigo');
-                              return (
-                                <div
-                                  key={pt.id}
-                                  className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3 group"
+
+                          {/* Search in Teams if more than 3 teams */}
+                          {projectTeams.length > 3 && (
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                              <input
+                                type="text"
+                                value={teamListSearch}
+                                onChange={(e) => setTeamListSearch(e.target.value)}
+                                placeholder="Filter assigned teams..."
+                                className="w-full pl-8 pr-7 py-1.5 bg-[#F8F9FC] dark:bg-[#151F32] border border-slate-200/80 dark:border-[#263449] rounded-xl text-xs text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                              />
+                              {teamListSearch && (
+                                <button
+                                  type="button"
+                                  onClick={() => setTeamListSearch('')}
+                                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                                 >
-                                  <div className="flex items-center gap-3 min-w-0">
-                                    <div
-                                      className={`h-9 w-9 rounded-lg ${teamColor.bg} text-white flex items-center justify-center shrink-0 shadow-2xs`}
-                                    >
-                                      <Users className="h-4 w-4" />
-                                    </div>
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <p className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
-                                          {t?.name || 'Unnamed Team'}
-                                        </p>
-                                        <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/30 px-1.5 py-0.2 rounded font-mono">
-                                          {t?.member_count ?? 'Team'} {t?.member_count === 1 ? 'member' : 'members'}
-                                        </span>
-                                      </div>
-                                      {t?.description && (
-                                        <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] truncate max-w-xs">
-                                          {t.description}
-                                        </p>
-                                      )}
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Teams Content Body */}
+                          {teamsLoading ? (
+                            <div className="space-y-3 py-2">
+                              {[1, 2].map((idx) => (
+                                <div key={idx} className="p-3 rounded-lg border border-slate-100 dark:border-[#263449] animate-pulse flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2.5 flex-1">
+                                    <div className="h-9 w-9 rounded-lg bg-slate-200 dark:bg-[#1B263A]" />
+                                    <div className="space-y-1.5 flex-1">
+                                      <div className="h-3.5 w-24 bg-slate-200 dark:bg-[#1B263A] rounded" />
+                                      <div className="h-2.5 w-16 bg-slate-200 dark:bg-[#1B263A] rounded" />
                                     </div>
                                   </div>
-
-                                  {canManageProjects && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setTargetTeamToRemove(pt);
-                                        setRemoveTeamModalOpen(true);
-                                      }}
-                                      className="h-7 w-7 rounded-md text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center justify-center transition-colors cursor-pointer shrink-0 opacity-80 hover:opacity-100"
-                                      title="Remove team from project"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
                                 </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </Card>
+                              ))}
+                            </div>
+                          ) : projectTeams.length === 0 ? (
+                            <div className="py-8 text-center space-y-2.5">
+                              <div className="mx-auto h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                                <Users className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 dark:text-[#F8FAFC]">
+                                  No teams assigned to this project yet.
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] max-w-xs mx-auto mt-0.5">
+                                  Assign an entire team to give all its members access at once.
+                                </p>
+                              </div>
+                              {canManageProjects && (
+                                <Button
+                                  variant="secondary"
+                                  size="xs"
+                                  onClick={handleOpenAddTeamModal}
+                                  className="mt-2 inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  <span>Assign Team</span>
+                                </Button>
+                              )}
+                            </div>
+                          ) : displayTeams.length === 0 ? (
+                            <p className="text-xs text-slate-400 text-center py-6">
+                              No teams matched &quot;{teamListSearch}&quot;.
+                            </p>
+                          ) : (
+                            <div className="divide-y divide-slate-100 dark:divide-[#263449]">
+                              {displayTeams.map((pt) => {
+                                const teamIconComp = getIconComponent(pt.team?.icon);
+                                const teamColors = getColorClasses(pt.team?.color);
 
-                      {/* ======================================== */}
-                      {/* COLUMN 2: PROJECT MEMBERS (7 cols on lg) */}
-                      {/* ======================================== */}
-                      <Card className="lg:col-span-7 p-5 flex flex-col space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-[#263449]">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
-                              Project Members
-                            </h3>
-                            <Badge variant="emerald" size="xs">
-                              {effectiveMembers.length}
-                            </Badge>
-                          </div>
+                                return (
+                                  <div
+                                    key={pt.id}
+                                    className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3 group"
+                                  >
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <div
+                                        className={`h-9 w-9 rounded-xl ${teamColors.bg} text-white flex items-center justify-center shrink-0 shadow-2xs`}
+                                      >
+                                        <teamIconComp className="h-4 w-4" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
+                                          {pt.team?.name || 'Unnamed Team'}
+                                        </p>
+                                        <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] truncate">
+                                          {pt.team?.description || 'Team workspace'}
+                                        </p>
+                                      </div>
+                                    </div>
 
-                          <div className="flex items-center gap-2">
-                            {/* Filter Tabs */}
-                            <div className="flex items-center gap-1 p-0.5 rounded-md bg-slate-100 dark:bg-[#151F32] border border-slate-200/60 dark:border-[#263449] text-[11px]">
-                              <button
-                                type="button"
-                                onClick={() => setMemberViewFilter('all')}
-                                className={`px-2 py-0.5 rounded transition-all cursor-pointer font-medium ${
-                                  memberViewFilter === 'all'
-                                    ? 'bg-white dark:bg-[#202D43] text-indigo-600 dark:text-indigo-400 shadow-2xs font-semibold'
-                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                                }`}
-                              >
-                                All ({effectiveMembers.length})
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setMemberViewFilter('direct')}
-                                className={`px-2 py-0.5 rounded transition-all cursor-pointer font-medium ${
-                                  memberViewFilter === 'direct'
-                                    ? 'bg-white dark:bg-[#202D43] text-indigo-600 dark:text-indigo-400 shadow-2xs font-semibold'
-                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                                }`}
-                              >
-                                Direct ({directMembersCount})
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setMemberViewFilter('team')}
-                                className={`px-2 py-0.5 rounded transition-all cursor-pointer font-medium ${
-                                  memberViewFilter === 'team'
-                                    ? 'bg-white dark:bg-[#202D43] text-indigo-600 dark:text-indigo-400 shadow-2xs font-semibold'
-                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                                }`}
-                              >
-                                From Teams ({teamMembersCount})
-                              </button>
+                                    {canManageProjects && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setTargetTeamToRemove(pt);
+                                          setRemoveTeamModalOpen(true);
+                                        }}
+                                        className="h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center justify-center transition-colors cursor-pointer shrink-0 opacity-70 group-hover:opacity-100"
+                                        title="Remove team from project"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </Card>
+
+                        {/* ========================================================= */}
+                        {/* CARD 2: PEOPLE WITH PROJECT ACCESS                        */}
+                        {/* ========================================================= */}
+                        <Card className="p-5 sm:p-6 flex flex-col space-y-4 shadow-xs">
+                          <div className="flex items-center justify-between gap-3 pb-3.5 border-b border-slate-100 dark:border-[#263449]">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                                People with project access
+                              </h3>
+                              <Badge variant="emerald" size="xs">
+                                {effectiveMembers.length}
+                              </Badge>
                             </div>
 
                             {canManageProjects && (
@@ -1137,182 +1391,361 @@ const Projects = () => {
                                 className="inline-flex items-center gap-1 shadow-2xs"
                               >
                                 <Plus className="h-3 w-3" />
-                                <span>Add Member</span>
+                                <span>Add Person</span>
                               </Button>
                             )}
                           </div>
-                        </div>
 
-                        {/* Search in Members if more than 3 members */}
-                        {effectiveMembers.length > 3 && (
-                          <div className="relative">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
-                            <input
-                              type="text"
-                              value={memberListSearch}
-                              onChange={(e) => setMemberListSearch(e.target.value)}
-                              placeholder="Search project members by name, email, or team..."
-                              className="w-full pl-8 pr-7 py-1 bg-slate-50 dark:bg-[#151F32] border border-slate-200 dark:border-[#263449] rounded-md text-xs text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            />
-                            {memberListSearch && (
-                              <button
-                                type="button"
-                                onClick={() => setMemberListSearch('')}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            )}
-                          </div>
-                        )}
+                          {/* Search in Members if more than 3 members */}
+                          {effectiveMembers.length > 3 && (
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                              <input
+                                type="text"
+                                value={memberListSearch}
+                                onChange={(e) => setMemberListSearch(e.target.value)}
+                                placeholder="Search people by name, email, or team..."
+                                className="w-full pl-8 pr-7 py-1.5 bg-[#F8F9FC] dark:bg-[#151F32] border border-slate-200/80 dark:border-[#263449] rounded-xl text-xs text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                              />
+                              {memberListSearch && (
+                                <button
+                                  type="button"
+                                  onClick={() => setMemberListSearch('')}
+                                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          )}
 
-                        {/* Members Content Body */}
-                        {membersLoading ? (
-                          <div className="space-y-3 py-2">
-                            {[1, 2, 3].map((idx) => (
-                              <div key={idx} className="p-3 rounded-lg border border-slate-100 dark:border-[#263449] animate-pulse flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2.5 flex-1">
-                                  <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-[#1B263A]" />
-                                  <div className="space-y-1.5 flex-1">
-                                    <div className="h-3.5 w-28 bg-slate-200 dark:bg-[#1B263A] rounded" />
-                                    <div className="h-2.5 w-36 bg-slate-200 dark:bg-[#1B263A] rounded" />
+                          {/* Members Content Body */}
+                          {membersLoading ? (
+                            <div className="space-y-3 py-2">
+                              {[1, 2, 3].map((idx) => (
+                                <div key={idx} className="p-3 rounded-lg border border-slate-100 dark:border-[#263449] animate-pulse flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2.5 flex-1">
+                                    <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-[#1B263A]" />
+                                    <div className="space-y-1.5 flex-1">
+                                      <div className="h-3.5 w-28 bg-slate-200 dark:bg-[#1B263A] rounded" />
+                                      <div className="h-2.5 w-36 bg-slate-200 dark:bg-[#1B263A] rounded" />
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : effectiveMembers.length === 0 ? (
-                          <div className="py-8 text-center space-y-2.5">
-                            <div className="mx-auto h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                              <UserCheck className="h-5 w-5" />
+                              ))}
                             </div>
-                            <p className="text-xs font-semibold text-slate-800 dark:text-[#F8FAFC]">
-                              No members are currently assigned to this project.
-                            </p>
-                            <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] max-w-xs mx-auto">
-                              Add direct members or assign workspace teams to collaborate on project deliverables.
-                            </p>
-                            {canManageProjects && (
-                              <div className="flex items-center justify-center gap-2 pt-1">
+                          ) : effectiveMembers.length === 0 ? (
+                            <div className="py-8 text-center space-y-2.5">
+                              <div className="mx-auto h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                                <UserCheck className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 dark:text-[#F8FAFC]">
+                                  No people have access to this project yet.
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] max-w-xs mx-auto mt-0.5">
+                                  Add a person directly or assign a team to give its members access.
+                                </p>
+                              </div>
+                              {canManageProjects && (
                                 <Button
                                   variant="secondary"
                                   size="xs"
                                   onClick={handleOpenAddMemberModal}
-                                  className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400"
+                                  className="mt-2 inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400"
                                 >
                                   <Plus className="h-3 w-3" />
-                                  <span>Add Member</span>
+                                  <span>Add Person</span>
                                 </Button>
-                                <Button
-                                  variant="secondary"
-                                  size="xs"
-                                  onClick={handleOpenAddTeamModal}
-                                  className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400"
-                                >
-                                  <Users className="h-3 w-3" />
-                                  <span>Add Team</span>
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        ) : memberViewFilter === 'direct' && directMembersCount === 0 ? (
-                          <div className="py-8 text-center space-y-2">
-                            <p className="text-xs font-medium text-slate-600 dark:text-[#94A3B8]">
-                              No direct members assigned.
+                              )}
+                            </div>
+                          ) : displayMembers.length === 0 ? (
+                            <p className="text-xs text-slate-400 text-center py-6">
+                              No people matched &quot;{memberListSearch}&quot;.
                             </p>
-                            <p className="text-[11px] text-slate-400">
-                              All current members are receiving project access through assigned teams.
-                            </p>
-                            {canManageProjects && (
-                              <Button
-                                variant="secondary"
-                                size="xs"
-                                onClick={handleOpenAddMemberModal}
-                                className="mt-1 inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400"
-                              >
-                                <Plus className="h-3 w-3" />
-                                <span>Add Direct Member</span>
-                              </Button>
-                            )}
-                          </div>
-                        ) : displayMembers.length === 0 ? (
-                          <p className="text-xs text-slate-400 text-center py-6">
-                            No members matched "{memberListSearch}".
-                          </p>
-                        ) : (
-                          <div className="divide-y divide-slate-100 dark:divide-[#263449]">
-                            {displayMembers.map((m) => {
-                              const isDirect = m.source_type === 'direct' || m.source_type === 'both';
-                              const isTeam = m.source_type === 'team' || m.source_type === 'both';
-                              const isSelf = m.id === user?.id;
+                          ) : (
+                            <div className="divide-y divide-slate-100 dark:divide-[#263449]">
+                              {displayMembers.map((m) => {
+                                const isDirect = m.source_type === 'direct' || m.source_type === 'both';
+                                const isTeam = m.source_type === 'team' || m.source_type === 'both';
+                                const isSelf = m.id === user?.id;
+                                const teamNamesStr =
+                                  m.team_names && m.team_names.length > 0 ? m.team_names.join(', ') : 'Team';
 
-                              return (
-                                <div
-                                  key={m.id}
-                                  className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3 group"
-                                >
-                                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                                    <Avatar user={m} size="sm" variant="indigo-solid" />
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <p className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
-                                          {getDisplayName(m)}
-                                          {isSelf && (
-                                            <span className="ml-1 text-[10px] font-normal text-slate-400">
-                                              (You)
+                                let sourceLabel = '';
+                                let badgeClasses = 'bg-slate-100 dark:bg-[#1B263A] text-slate-700 dark:text-[#CBD5E1] border-slate-200/80 dark:border-[#263449]';
+
+                                if (isDirect && isTeam) {
+                                  sourceLabel = `Added directly • ${teamNamesStr}`;
+                                  badgeClasses = 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800/40';
+                                } else if (isDirect) {
+                                  sourceLabel = 'Added directly';
+                                  badgeClasses = 'bg-slate-100 dark:bg-[#1B263A] text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-[#263449]';
+                                } else if (isTeam) {
+                                  sourceLabel = teamNamesStr;
+                                  badgeClasses = 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200/80 dark:border-purple-800/40';
+                                }
+
+                                const isMenuOpen = actionMenuOpenId === `member-${m.id}`;
+
+                                return (
+                                  <div
+                                    key={m.id}
+                                    className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3 group relative"
+                                  >
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <Avatar user={m} size="sm" variant="indigo-solid" />
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <p className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
+                                            {getDisplayName(m)}
+                                            {isSelf && (
+                                              <span className="ml-1 text-[10px] font-normal text-slate-400">
+                                                (You)
+                                              </span>
+                                            )}
+                                          </p>
+
+                                          {m.designation && (
+                                            <span className="text-[10px] text-slate-500 dark:text-[#94A3B8] bg-slate-100 dark:bg-[#1B263A] px-1.5 py-0.2 rounded font-normal">
+                                              {m.designation}
                                             </span>
                                           )}
-                                        </p>
-
-                                        {/* Source Access Badges */}
-                                        <div className="flex items-center gap-1.5">
-                                          {isDirect && (
-                                            <Badge variant="indigo" size="xs">
-                                              Direct
-                                            </Badge>
-                                          )}
-                                          {isTeam && (
-                                            <Badge variant="purple" size="xs">
-                                              {m.team_names && m.team_names.length > 0
-                                                ? m.team_names.join(', ')
-                                                : 'Team'}
-                                            </Badge>
-                                          )}
                                         </div>
-                                      </div>
 
-                                      <p className="text-[11px] text-slate-400 dark:text-[#94A3B8] truncate font-mono">
-                                        {m.email}
-                                      </p>
+                                        <p className="text-[11px] text-slate-400 dark:text-[#94A3B8] truncate font-mono">
+                                          {m.email}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {/* Right: Access source badge + Three-dot action menu */}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      {sourceLabel && (
+                                        <span
+                                          className={`text-[10.5px] font-medium border px-2.5 py-0.5 rounded-full whitespace-nowrap ${badgeClasses}`}
+                                        >
+                                          {sourceLabel}
+                                        </span>
+                                      )}
+
+                                      {/* Three-dot action menu */}
+                                      <div className="relative">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActionMenuOpenId(isMenuOpen ? null : `member-${m.id}`);
+                                          }}
+                                          className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1B263A] flex items-center justify-center transition-colors cursor-pointer shrink-0 opacity-70 group-hover:opacity-100"
+                                          title="Member options"
+                                        >
+                                          <MoreVertical className="h-3.5 w-3.5" />
+                                        </button>
+
+                                        {isMenuOpen && (
+                                          <div
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-white dark:bg-[#1B263A] border border-slate-200 dark:border-[#263449] shadow-xl py-1 z-30 text-xs animate-scale-in"
+                                          >
+                                            {isDirect && canManageProjects ? (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActionMenuOpenId(null);
+                                                  setTargetMemberToRemove(m);
+                                                  setRemoveMemberModalOpen(true);
+                                                }}
+                                                className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors text-left font-medium cursor-pointer"
+                                              >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                                <span>Remove direct access</span>
+                                              </button>
+                                            ) : (
+                                              <div className="px-3 py-2 text-[11px] text-slate-400 dark:text-slate-500">
+                                                {isTeam ? `Access via ${teamNamesStr}` : 'Workspace access'}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </Card>
+                      </div>
 
-                                  {/* Member Actions */}
-                                  {isDirect && canManageProjects ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setTargetMemberToRemove(m);
-                                        setRemoveMemberModalOpen(true);
-                                      }}
-                                      className="h-7 w-7 rounded-md text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center justify-center transition-colors cursor-pointer shrink-0 opacity-80 hover:opacity-100"
-                                      title="Remove direct project membership"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  ) : (
-                                    <span className="text-[10px] text-slate-400 dark:text-[#64748B] italic shrink-0 px-2 py-0.5">
-                                      Via Team
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </Card>
+                      {/* Informational Help Banner */}
+                      <div className="flex items-start sm:items-center gap-3 p-3.5 sm:p-4 rounded-xl bg-slate-50/80 dark:bg-[#151F32]/60 border border-slate-200/70 dark:border-[#263449] text-xs text-slate-600 dark:text-[#94A3B8]">
+                        <div className="h-7 w-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+                          <Info className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="leading-relaxed">
+                            <strong className="font-semibold text-slate-900 dark:text-[#F8FAFC] mr-1.5">
+                              How project access works:
+                            </strong>
+                            Assigning a team automatically gives all of its members access to this project. You can also add people individually.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* ============================================================ */}
+                  {/* TAB 4: ACTIVITY TIMELINE                                     */}
+                  {/* ============================================================ */}
+                  {activeProjectTab === 'activity' && (
+                    <div className="space-y-4 animate-fade-in">
+                      {/* Header Ribbon */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#131D2E] p-4 rounded-xl border border-slate-200/80 dark:border-[#202C3F] shadow-2xs">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC] flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-indigo-500" />
+                            <span>Project Activity</span>
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-[#94A3B8] mt-0.5">
+                            Real-time audit log of task creations, assignments, status transitions, and deliverables.
+                          </p>
+                        </div>
+
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          onClick={() => fetchProjectActivities()}
+                          disabled={activitiesLoading}
+                          className="self-start sm:self-auto gap-1"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${activitiesLoading ? 'animate-spin' : ''}`} />
+                          <span>Refresh</span>
+                        </Button>
+                      </div>
+
+                      {/* Timeline Body */}
+                      {activitiesLoading && activities.length === 0 ? (
+                        <div className="bg-white dark:bg-[#131D2E] rounded-xl border border-slate-200/80 dark:border-[#202C3F] p-6 space-y-4 shadow-2xs">
+                          {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className="flex items-start gap-3 animate-pulse">
+                              <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-[#1B283F] shrink-0" />
+                              <div className="space-y-1.5 flex-1">
+                                <div className="h-3.5 w-48 bg-slate-200 dark:bg-[#1B283F] rounded" />
+                                <div className="h-2.5 w-24 bg-slate-200 dark:bg-[#1B283F] rounded" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : activitiesError ? (
+                        <div className="p-8 text-center rounded-xl border border-rose-200 dark:border-rose-900/40 bg-white dark:bg-[#131D2E] shadow-2xs space-y-3">
+                          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400">
+                            <AlertTriangle className="h-5 w-5" />
+                          </div>
+                          <div className="space-y-0.5 max-w-sm mx-auto">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                              Unable to load activity timeline
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-[#94A3B8]">
+                              {activitiesError}
+                            </p>
+                          </div>
+                          <Button
+                            variant="primary"
+                            size="xs"
+                            onClick={() => fetchProjectActivities()}
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      ) : activities.length === 0 ? (
+                        <div className="py-12 text-center bg-white dark:bg-[#131D2E] rounded-xl border border-dashed border-slate-300 dark:border-[#202C3F] p-6 space-y-3 shadow-2xs">
+                          <div className="mx-auto h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                            <Activity className="h-5 w-5" />
+                          </div>
+                          <div className="space-y-0.5 max-w-sm mx-auto">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                              No activity yet
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-[#94A3B8]">
+                              Task creation, assignments, status changes, and other project updates will appear here.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-white dark:bg-[#131D2E] rounded-xl border border-slate-200/80 dark:border-[#202C3F] p-4 sm:p-5 shadow-2xs space-y-6">
+                          {(() => {
+                            // Group activities by date
+                            const groups = {};
+                            activities.forEach((act) => {
+                              const key = getActivityGroupKey(act.created_at);
+                              if (!groups[key]) groups[key] = [];
+                              groups[key].push(act);
+                            });
+
+                            return Object.entries(groups).map(([groupTitle, items]) => (
+                              <div key={groupTitle} className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-[#8292A9] font-mono">
+                                    {groupTitle}
+                                  </span>
+                                  <div className="h-px flex-1 bg-slate-100 dark:bg-[#202C3F]" />
+                                </div>
+
+                                <div className="space-y-3.5 relative before:absolute before:left-4 before:top-3 before:bottom-3 before:w-px before:bg-slate-200/70 dark:before:bg-[#202C3F]">
+                                  {items.map((act) => {
+                                    const iconCfg = getActivityIconConfig(act.action);
+                                    const IconComp = iconCfg.icon;
+                                    const actorName = act.actor ? getDisplayName(act.actor) : 'Team Member';
+                                    const timeStr = formatActivityTime(act.created_at);
+
+                                    return (
+                                      <div
+                                        key={act.id}
+                                        className="flex items-start justify-between gap-3 relative pl-1 group"
+                                      >
+                                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                                          {/* Avatar with subtle Action Badge overlay */}
+                                          <div className="relative shrink-0">
+                                            <Avatar
+                                              user={act.actor}
+                                              size="sm"
+                                              variant="indigo-solid"
+                                              className="ring-2 ring-white dark:ring-[#131D2E]"
+                                            />
+                                            <div
+                                              className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border flex items-center justify-center shadow-2xs ${iconCfg.bg}`}
+                                            >
+                                              <IconComp className="h-2.5 w-2.5" />
+                                            </div>
+                                          </div>
+
+                                          {/* Content */}
+                                          <div className="min-w-0 flex-1 pt-0.5 space-y-0.5">
+                                            <p className="text-xs text-slate-700 dark:text-[#CBD5E1] leading-relaxed">
+                                              <strong className="font-semibold text-slate-900 dark:text-[#F8FAFC] mr-1.5">
+                                                {actorName}
+                                              </strong>
+                                              <span>{act.details || act.action.replace('_', ' ').toLowerCase()}</span>
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        {/* Timestamp */}
+                                        <span className="text-[11px] font-mono text-slate-400 dark:text-[#64748B] shrink-0 pt-0.5">
+                                          {timeStr}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1329,7 +1762,7 @@ const Projects = () => {
   // RENDER: PROJECTS DIRECTORY VIEW (/projects)
   // ============================================================
   return (
-    <div className="h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] overflow-hidden selection:bg-indigo-500 selection:text-white">
+    <div className="h-screen bg-[#F4F6FA] dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] overflow-hidden selection:bg-indigo-500 selection:text-white">
       <Navbar onMenuClick={() => setSidebarOpen(true)} />
 
       <div className="flex-1 flex overflow-hidden">
@@ -1436,7 +1869,7 @@ const Projects = () => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search projects by name or description..."
-                    className="w-full pl-9 pr-8 py-1.5 bg-slate-50 dark:bg-[#151F32] border border-slate-200 dark:border-[#263449] rounded-lg text-xs text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                    className="w-full pl-9 pr-8 py-1.5 bg-[#F8F9FC] dark:bg-[#151F32] border border-slate-200/80 dark:border-[#263449] rounded-xl text-xs text-slate-900 dark:text-[#F8FAFC] placeholder-slate-400 dark:placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   />
                   {searchQuery && (
                     <button
@@ -1513,7 +1946,8 @@ const Projects = () => {
                   return (
                     <Card
                       key={project.id}
-                      className="p-5 flex flex-col justify-between hover:shadow-md hover:border-slate-300 dark:hover:border-[#334155] transition-all group relative"
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                      className="p-5 flex flex-col justify-between hover:shadow-md hover:border-slate-300 dark:hover:border-[#334155] transition-all group relative cursor-pointer"
                     >
                       {/* Top Row: Visual Badge, Title, Menu */}
                       <div className="space-y-3">
@@ -1526,10 +1960,7 @@ const Projects = () => {
                             </div>
 
                             <div className="min-w-0">
-                              <h3
-                                onClick={() => navigate(`/projects/${project.id}`)}
-                                className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC] truncate cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                              >
+                              <h3 className="text-sm font-semibold text-slate-900 dark:text-[#F8FAFC] truncate hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
                                 {project.name}
                               </h3>
                               <Badge
@@ -2039,13 +2470,13 @@ const Projects = () => {
         </Modal>
 
         {/* ============================================================ */}
-        {/* ADD TEAM TO PROJECT MODAL                                    */}
+        {/* ASSIGN TEAM TO PROJECT MODAL                                 */}
         {/* ============================================================ */}
         <Modal
           isOpen={addTeamModalOpen}
           onClose={() => !teamSubmitting && setAddTeamModalOpen(false)}
-          title="Add Team to Project"
-          description="Assign a workspace team to grant all its members access to this project."
+          title="Assign a Team"
+          description="Everyone in this team will automatically get access to this project."
           size="md"
         >
           <div className="space-y-4 text-xs">
@@ -2166,13 +2597,13 @@ const Projects = () => {
         </Modal>
 
         {/* ============================================================ */}
-        {/* ADD MEMBER TO PROJECT MODAL                                  */}
+        {/* ADD PERSON TO PROJECT MODAL                                  */}
         {/* ============================================================ */}
         <Modal
           isOpen={addMemberModalOpen}
           onClose={() => !memberSubmitting && setAddMemberModalOpen(false)}
-          title="Add Direct Member to Project"
-          description="Select a workspace user to assign directly as a collaborator on this project."
+          title="Add Person"
+          description="This person will get direct access to this project."
           size="md"
         >
           <div className="space-y-4 text-xs">
@@ -2261,7 +2692,7 @@ const Projects = () => {
                       <div className="shrink-0 flex items-center gap-2">
                         {isDirectMember ? (
                           <Badge variant="neutral" size="xs">
-                            Direct Member
+                            Already Added
                           </Badge>
                         ) : isSelected ? (
                           <div className="h-5 w-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
@@ -2307,7 +2738,7 @@ const Projects = () => {
                 loading={memberSubmitting}
                 disabled={!selectedMemberToAdd || memberSubmitting}
               >
-                Add Member
+                Add Person
               </Button>
             </div>
           </div>
@@ -2319,7 +2750,7 @@ const Projects = () => {
         <Modal
           isOpen={removeTeamModalOpen}
           onClose={() => !teamSubmitting && setRemoveTeamModalOpen(false)}
-          title="Remove Team from Project"
+          title="Remove team from project?"
           size="sm"
         >
           <div className="space-y-4 text-xs">
@@ -2327,13 +2758,10 @@ const Projects = () => {
               <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
               <div className="space-y-1">
                 <p className="font-semibold">
-                  Remove "{targetTeamToRemove?.team?.name || targetTeamToRemove?.name || 'Team'}" from Project?
+                  Remove "{targetTeamToRemove?.team?.name || targetTeamToRemove?.name || 'Team'}" from project?
                 </p>
                 <p className="text-[11px] text-rose-700 dark:text-rose-300/90 leading-relaxed">
-                  Removing this team will revoke project access for team members who do not have separate direct membership.
-                </p>
-                <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] pt-1">
-                  Note: The actual Team and its member records will <strong>NOT</strong> be deleted.
+                  Removing this team will remove project access inherited from this team. The workspace team and its members will not be deleted.
                 </p>
               </div>
             </div>
@@ -2362,12 +2790,12 @@ const Projects = () => {
         </Modal>
 
         {/* ============================================================ */}
-        {/* REMOVE MEMBER CONFIRMATION MODAL                             */}
+        {/* REMOVE PERSON CONFIRMATION MODAL                             */}
         {/* ============================================================ */}
         <Modal
           isOpen={removeMemberModalOpen}
           onClose={() => !memberSubmitting && setRemoveMemberModalOpen(false)}
-          title="Remove Direct Member from Project"
+          title="Remove person from project?"
           size="sm"
         >
           <div className="space-y-4 text-xs">
@@ -2375,18 +2803,10 @@ const Projects = () => {
               <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
               <div className="space-y-1">
                 <p className="font-semibold">
-                  Remove direct membership for "{targetMemberToRemove?.full_name || targetMemberToRemove?.username || 'Member'}"?
+                  Remove "{targetMemberToRemove?.full_name || targetMemberToRemove?.username || 'this person'}" from project?
                 </p>
                 <p className="text-[11px] text-rose-700 dark:text-rose-300/90 leading-relaxed">
-                  This user will no longer be assigned directly to this project.
-                </p>
-                {targetMemberToRemove?.source_type === 'both' && (
-                  <p className="text-[11px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 p-2 rounded mt-1">
-                    Notice: Because this user also belongs to an assigned team, they will retain effective access to this project via their team.
-                  </p>
-                )}
-                <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] pt-1">
-                  Note: The user account and company membership will <strong>NOT</strong> be deleted.
+                  This removes their direct project access. If they are also part of an assigned team, they will continue to have access through that team.
                 </p>
               </div>
             </div>
@@ -2408,7 +2828,7 @@ const Projects = () => {
                 onClick={handleRemoveMemberConfirm}
                 loading={memberSubmitting}
               >
-                Remove Member
+                Remove Person
               </Button>
             </div>
           </div>

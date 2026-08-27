@@ -473,6 +473,7 @@ export const CompanyProvider = ({ children }) => {
 
   const value = {
     company,
+    currentCompany: company,
     companies,
     members,
     invitations,

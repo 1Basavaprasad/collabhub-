@@ -98,6 +98,7 @@ const Company = () => {
     invitationsLoading = false,
     invitationsError = null,
     error = null,
+    clearError,
     fetchCompany,
     createCompany,
     updateCompany,
@@ -266,6 +267,8 @@ const Company = () => {
     setIsRefreshing(true);
     setSuccessMessage(null);
     setFormError(null);
+    setInviteError(null);
+    if (typeof clearError === 'function') clearError();
     try {
       if (typeof fetchCompany === 'function') {
         await fetchCompany();
@@ -308,6 +311,7 @@ const Company = () => {
       department: prefillData?.department || '',
     });
     setInviteError(null);
+    if (typeof clearError === 'function') clearError();
     setIsInviteModalOpen(true);
   };
 
@@ -460,6 +464,7 @@ const Company = () => {
       });
 
       closeInviteModal();
+      if (typeof clearError === 'function') clearError();
       addToast(`Invitation sent to ${trimmedEmail}`, 'success');
       setSuccessMessage(`Invitation successfully sent to ${trimmedEmail}`);
     } catch (err) {
@@ -508,6 +513,7 @@ const Company = () => {
     try {
       await revokeInvitation(revokingInvitation.id);
       closeRevokeModal();
+      if (typeof clearError === 'function') clearError();
       addToast('Invitation revoked successfully', 'info');
     } catch (err) {
       addToast(err.message || 'Failed to revoke invitation', 'error');
@@ -761,7 +767,7 @@ const Company = () => {
   };
 
   return (
-    <div className="h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
+    <div className="h-screen bg-[#F4F6FA] dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
       {/* Top SaaS Navbar */}
       <Navbar onToggleSidebar={() => setSidebarOpen((prev) => !prev)} />
 
@@ -1431,7 +1437,7 @@ const Company = () => {
                                   Joined
                                 </th>
                                 {canEditMembers && (
-                                  <th scope="col" className="px-6 py-3.5 text-right text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
+                                  <th scope="col" className="px-6 py-3.5 text-right text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider w-24 min-w-[84px]">
                                     Actions
                                   </th>
                                 )}
@@ -1497,7 +1503,7 @@ const Company = () => {
 
                                     {/* Actions Column */}
                                     {canEditMembers && (
-                                      <td className="px-6 py-4 whitespace-nowrap text-right text-xs">
+                                      <td className="px-6 py-4 whitespace-nowrap text-right text-xs w-24 min-w-[84px]">
                                         {(isOwner || (isAdmin && m.role !== 'OWNER')) ? (
                                           <Button
                                             variant="ghost"
@@ -1770,130 +1776,95 @@ const Company = () => {
                     ) : (
                       <>
                         {/* DESKTOP TABLE */}
-                        <div className="hidden md:block overflow-hidden bg-white dark:bg-[#151F32] rounded-xl border border-slate-200/80 dark:border-[#263449] shadow-xs">
-                          <table className="min-w-full divide-y divide-slate-200 dark:divide-[#263449]">
-                            <thead className="bg-slate-50/80 dark:bg-[#1B263A]/40">
-                              <tr>
-                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
-                                  Recipient
-                                </th>
-                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
-                                  Role
-                                </th>
-                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
-                                  Designation
-                                </th>
-                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
-                                  Status
-                                </th>
-                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
-                                  Sent
-                                </th>
-                                <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
-                                  Deadline / Event
-                                </th>
-                                <th scope="col" className="px-6 py-3.5 text-right text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
-                                  Actions
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-[#263449] bg-white dark:bg-[#151F32]">
-                              {filteredInvitations.map((inv) => {
-                                const status = (inv.status || '').toUpperCase();
-                                const isPending = status === 'PENDING';
-                                const canReinvite = (status === 'EXPIRED' || status === 'REVOKED') && canInviteMembers;
-
-                                return (
-                                  <tr key={inv.id} className="hover:bg-slate-50/60 dark:hover:bg-[#202D43]/50 transition-colors">
-                                    {/* Recipient Email */}
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                      <div className="flex items-center gap-2.5">
-                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                                          <Mail className="h-4 w-4" />
+                        <div className="hidden md:block overflow-hidden bg-white dark:bg-[#151F32] rounded-2xl border border-slate-200/80 dark:border-[#263449] shadow-xs">
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-slate-200 dark:divide-[#263449]">
+                              <thead className="bg-slate-50/80 dark:bg-[#1B263A]/40">
+                                <tr>
+                                  <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
+                                    Recipient
+                                  </th>
+                                  <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
+                                    Role
+                                  </th>
+                                  <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
+                                    Designation
+                                  </th>
+                                  <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
+                                    Status
+                                  </th>
+                                  <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
+                                    Sent
+                                  </th>
+                                  <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
+                                    Deadline / Event
+                                  </th>
+                                  <th scope="col" className="px-6 py-3.5 text-center text-xs font-semibold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider w-24 min-w-[84px]">
+                                    Actions
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-[#263449] bg-white dark:bg-[#151F32]">
+                                {filteredInvitations.map((inv) => {
+                                  return (
+                                    <tr key={inv.id} className="hover:bg-slate-50/60 dark:hover:bg-[#202D43]/50 transition-colors">
+                                      {/* Recipient Email */}
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2.5">
+                                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                                            <Mail className="h-4 w-4" />
+                                          </div>
+                                          <span className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] font-mono">
+                                            {inv.email}
+                                          </span>
                                         </div>
-                                        <span className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] font-mono">
-                                          {inv.email}
-                                        </span>
-                                      </div>
-                                    </td>
+                                      </td>
 
-                                    {/* Role */}
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                      {renderRoleBadge(inv.role)}
-                                    </td>
+                                      {/* Role */}
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        {renderRoleBadge(inv.role)}
+                                      </td>
 
-                                    {/* Designation */}
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-700 dark:text-[#CBD5E1]">
-                                      {inv.designation || <span className="text-slate-400 dark:text-[#64748B]">—</span>}
-                                    </td>
+                                      {/* Designation */}
+                                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-700 dark:text-[#CBD5E1]">
+                                        {inv.designation || <span className="text-slate-400 dark:text-[#64748B]">—</span>}
+                                      </td>
 
-                                    {/* Status Badge */}
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                      {renderStatusBadge(inv.status)}
-                                    </td>
+                                      {/* Status Badge */}
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        {renderStatusBadge(inv.status)}
+                                      </td>
 
-                                    {/* Sent Date */}
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 dark:text-[#94A3B8] font-mono">
-                                      {formatEventDate(inv.created_at)}
-                                    </td>
+                                      {/* Sent Date */}
+                                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 dark:text-[#94A3B8] font-mono">
+                                        {formatEventDate(inv.created_at)}
+                                      </td>
 
-                                    {/* Dynamic Lifecycle Event (Deadline / Accepted / Revoked / Expired) */}
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                      {renderInvitationLifecycleEvent(inv)}
-                                    </td>
+                                      {/* Dynamic Lifecycle Event (Deadline / Accepted / Revoked / Expired) */}
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        {renderInvitationLifecycleEvent(inv)}
+                                      </td>
 
-                                    {/* Actions */}
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-xs">
-                                      <div className="flex items-center justify-end gap-1.5">
-                                        <Button
-                                          variant="ghost"
-                                          size="xs"
-                                          icon={Eye}
-                                          onClick={() => openDetailsModal(inv)}
-                                          aria-label={`View details for invitation to ${inv.email}`}
-                                          title="View invitation details"
-                                        >
-                                          Details
-                                        </Button>
-
-                                        {isPending && isOwner && (
-                                          <Button
-                                            variant="danger"
-                                            size="xs"
-                                            icon={Trash2}
-                                            onClick={() => openRevokeModal(inv)}
-                                            aria-label={`Revoke invitation for ${inv.email}`}
-                                            title="Revoke invitation"
+                                      {/* Actions */}
+                                      <td className="px-6 py-4 whitespace-nowrap text-center text-xs w-24 min-w-[84px]">
+                                        <div className="flex items-center justify-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => openDetailsModal(inv)}
+                                            aria-label={`View details for invitation to ${inv.email}`}
+                                            title="View invitation details"
+                                            className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200/90 dark:border-[#263449] bg-white dark:bg-[#151F32] text-slate-500 dark:text-[#94A3B8] hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-all duration-150 shadow-2xs cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                           >
-                                            Revoke
-                                          </Button>
-                                        )}
-
-                                        {canReinvite && (
-                                          <Button
-                                            variant="ghost"
-                                            size="xs"
-                                            icon={RotateCcw}
-                                            onClick={() => openInviteModal({
-                                              email: inv.email,
-                                              role: inv.role,
-                                              designation: inv.designation,
-                                              department: inv.department,
-                                            })}
-                                            aria-label={`Invite ${inv.email} again with prefilled details`}
-                                            title="Invite again with prefilled details"
-                                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
-                                          >
-                                            Re-invite
-                                          </Button>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                                            <Eye className="h-4 w-4 shrink-0" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
 
                         {/* MOBILE CARDS */}
@@ -2191,7 +2162,11 @@ const Company = () => {
             required
             placeholder="colleague@company.com"
             value={inviteForm.email}
-            onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+            onChange={(e) => {
+              setInviteForm({ ...inviteForm, email: e.target.value });
+              if (inviteError) setInviteError(null);
+              if (error && typeof clearError === 'function') clearError();
+            }}
             icon={Mail}
             autoFocus
           />

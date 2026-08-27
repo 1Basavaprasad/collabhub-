@@ -39,7 +39,7 @@ const UserProfile = () => {
   };
 
   return (
-    <div id="profile" className="rounded-xl border border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#151F32] p-6 sm:p-7 shadow-xs space-y-6">
+    <div id="profile" className="rounded-2xl border border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#151F32] p-6 sm:p-7 shadow-xs space-y-6">
       {/* Top Banner with User Avatar & Refresh Action */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-[#263449]">
         <div className="flex items-center gap-4">

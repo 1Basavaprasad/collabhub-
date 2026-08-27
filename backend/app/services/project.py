@@ -10,6 +10,10 @@ from app.models.project import Project, ProjectStatus
 from app.models.project_member import ProjectMember
 from app.models.project_team import ProjectTeam
 from app.repositories.company import get_company_by_id, get_company_membership
+import re
+from sqlalchemy import select
+from app.models.project_activity import ProjectActivity
+from app.models.user import User
 from app.repositories.project import (
     add_project_member,
     add_project_team,
@@ -17,13 +21,16 @@ from app.repositories.project import (
     delete_project,
     get_company_projects,
     get_effective_project_members,
+    get_project_activities,
     get_project_by_company_and_name,
     get_project_by_id,
     get_project_member,
     get_project_simple,
     get_project_team,
+    is_user_effective_project_member,
     list_project_members,
     list_project_teams,
+    log_project_activity,
     remove_project_member,
     remove_project_team,
     update_project,
@@ -68,6 +75,29 @@ def _check_project_management_permission(
         )
 
 
+def _can_manage_project(
+    company_membership: CompanyMember,
+    project: Project,
+    user_id: uuid.UUID,
+) -> bool:
+    if company_membership.role in (CompanyRole.OWNER, CompanyRole.ADMIN):
+        return True
+    if project.created_by == user_id:
+        return True
+    return False
+
+
+def _can_access_project(
+    db: Session,
+    company_membership: CompanyMember,
+    project: Project,
+    user_id: uuid.UUID,
+) -> bool:
+    if _can_manage_project(company_membership, project, user_id):
+        return True
+    return is_user_effective_project_member(db, project.id, user_id)
+
+
 def create_project_service(
     db: Session,
     current_user_id: uuid.UUID,
@@ -105,7 +135,11 @@ def get_company_projects_service(
     search: str | None = None,
     sort_by: str | None = None,
 ) -> tuple[list[Project], int]:
-    _get_validated_membership(db, company_id, current_user_id)
+    _, membership = _get_validated_membership(db, company_id, current_user_id)
+
+    user_filter_id = (
+        current_user_id if membership.role == CompanyRole.MEMBER else None
+    )
 
     return get_company_projects(
         db=db,
@@ -115,6 +149,7 @@ def get_company_projects_service(
         status_filter=status_filter,
         search=search,
         sort_by=sort_by,
+        user_id=user_filter_id,
     )
 
 
@@ -124,13 +159,19 @@ def get_project_service(
     company_id: uuid.UUID,
     project_id: uuid.UUID,
 ) -> Project:
-    _get_validated_membership(db, company_id, current_user_id)
+    _, membership = _get_validated_membership(db, company_id, current_user_id)
 
     project = get_project_by_id(db, project_id)
     if not project or project.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found in this company workspace.",
+        )
+
+    if not _can_access_project(db, membership, project, current_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to view this project.",
         )
 
     return project
@@ -308,13 +349,19 @@ def list_project_teams_service(
     company_id: uuid.UUID,
     project_id: uuid.UUID,
 ) -> list[ProjectTeam]:
-    _get_validated_membership(db, company_id, current_user_id)
+    _, membership = _get_validated_membership(db, company_id, current_user_id)
 
     project = get_project_simple(db, project_id)
     if not project or project.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found in this company workspace.",
+        )
+
+    if not _can_access_project(db, membership, project, current_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to view this project's teams.",
         )
 
     return list_project_teams(db, project_id)
@@ -393,13 +440,19 @@ def list_project_members_service(
     project_id: uuid.UUID,
     effective: bool = False,
 ) -> list[ProjectMember] | list[dict]:
-    _get_validated_membership(db, company_id, current_user_id)
+    _, membership = _get_validated_membership(db, company_id, current_user_id)
 
     project = get_project_simple(db, project_id)
     if not project or project.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found in this company workspace.",
+        )
+
+    if not _can_access_project(db, membership, project, current_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to view this project's members.",
         )
 
     if effective:
@@ -413,13 +466,19 @@ def get_effective_project_members_service(
     company_id: uuid.UUID,
     project_id: uuid.UUID,
 ) -> list[dict]:
-    _get_validated_membership(db, company_id, current_user_id)
+    _, membership = _get_validated_membership(db, company_id, current_user_id)
 
     project = get_project_simple(db, project_id)
     if not project or project.company_id != company_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found in this company workspace.",
+        )
+
+    if not _can_access_project(db, membership, project, current_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to view this project's members.",
         )
 
     return get_effective_project_members(db, project_id)
@@ -450,4 +509,80 @@ def remove_project_member_service(
         )
 
     remove_project_member(db, project_id, user_id)
+
+
+def _resolve_project_activity_details(
+    db: Session,
+    activities: list[ProjectActivity],
+) -> list[ProjectActivity]:
+    uuid_pattern = re.compile(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    )
+
+    all_uuids: set[uuid.UUID] = set()
+    for act in activities:
+        if act.details:
+            matches = uuid_pattern.findall(act.details)
+            for m in matches:
+                try:
+                    all_uuids.add(uuid.UUID(m))
+                except (ValueError, TypeError):
+                    pass
+
+    if not all_uuids:
+        return activities
+
+    users_stmt = select(User).where(User.id.in_(all_uuids))
+    users = list(db.execute(users_stmt).scalars().all())
+    user_map = {str(u.id): (u.full_name or u.username or "member") for u in users if u}
+
+    for act in activities:
+        if act.details:
+            details_str = act.details
+            for uid_str, user_display_name in user_map.items():
+                if uid_str in details_str:
+                    details_str = re.sub(
+                        rf"(?i)\buser\s+{re.escape(uid_str)}\b",
+                        user_display_name,
+                        details_str,
+                    )
+                    details_str = details_str.replace(uid_str, user_display_name)
+            act.details = details_str
+
+    return activities
+
+
+def get_project_activity_service(
+    db: Session,
+    current_user_id: uuid.UUID,
+    company_id: uuid.UUID,
+    project_id: uuid.UUID,
+    page: int = 1,
+    limit: int = 50,
+) -> tuple[list[ProjectActivity], int]:
+    _, membership = _get_validated_membership(db, company_id, current_user_id)
+
+    project = get_project_simple(db, project_id)
+    if not project or project.company_id != company_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found in this company workspace.",
+        )
+
+    if not _can_access_project(db, membership, project, current_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to view this project's activity.",
+        )
+
+    activities, total = get_project_activities(
+        db=db,
+        project_id=project_id,
+        page=page,
+        limit=limit,
+    )
+
+    activities = _resolve_project_activity_details(db, activities)
+
+    return activities, total
 

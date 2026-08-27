@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.project import Project, ProjectStatus
+from app.models.project_activity import ProjectActivity
 from app.models.project_member import ProjectMember
 from app.models.project_team import ProjectTeam
 from app.models.team import Team
@@ -91,12 +92,31 @@ def get_company_projects(
     status_filter: str | None = None,
     search: str | None = None,
     sort_by: str | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> tuple[list[Project], int]:
     query = (
         db.query(Project)
         .options(selectinload(Project.creator))
         .filter(Project.company_id == company_id)
     )
+
+    if user_id is not None:
+        # Filter to projects where user is creator, direct member, or in an assigned team
+        direct_subquery = select(ProjectMember.project_id).where(
+            ProjectMember.user_id == user_id
+        )
+        team_subquery = (
+            select(ProjectTeam.project_id)
+            .join(TeamMember, ProjectTeam.team_id == TeamMember.team_id)
+            .where(TeamMember.user_id == user_id)
+        )
+        query = query.filter(
+            or_(
+                Project.created_by == user_id,
+                Project.id.in_(direct_subquery),
+                Project.id.in_(team_subquery),
+            )
+        )
 
     if status_filter:
         normalized_status = status_filter.strip().lower()
@@ -395,4 +415,94 @@ def get_effective_project_members(
         list(effective_dict.values()),
         key=lambda u: (u["full_name"].lower(), u["username"].lower()),
     )
+
+
+def log_project_activity(
+    db: Session,
+    project_id: uuid.UUID,
+    company_id: uuid.UUID,
+    action: str,
+    actor_user_id: uuid.UUID | None = None,
+    task_id: uuid.UUID | None = None,
+    target_user_id: uuid.UUID | None = None,
+    details: str | None = None,
+    event_metadata: str | None = None,
+    commit: bool = True,
+) -> ProjectActivity:
+    activity = ProjectActivity(
+        project_id=project_id,
+        company_id=company_id,
+        actor_user_id=actor_user_id,
+        task_id=task_id,
+        target_user_id=target_user_id,
+        action=action,
+        details=details,
+        event_metadata=event_metadata,
+    )
+    db.add(activity)
+    if commit:
+        db.commit()
+        db.refresh(activity)
+    return activity
+
+
+def get_project_activities(
+    db: Session,
+    project_id: uuid.UUID,
+    page: int = 1,
+    limit: int = 50,
+) -> tuple[list[ProjectActivity], int]:
+    base_query = select(ProjectActivity).where(ProjectActivity.project_id == project_id)
+
+    count_statement = select(func.count()).select_from(base_query.subquery())
+    total = db.execute(count_statement).scalar_one()
+
+    statement = (
+        base_query
+        .options(
+            selectinload(ProjectActivity.actor),
+            selectinload(ProjectActivity.target_user),
+            selectinload(ProjectActivity.task),
+        )
+        .order_by(ProjectActivity.created_at.desc(), ProjectActivity.id.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
+    results = list(db.execute(statement).scalars().all())
+    return results, total
+
+
+def is_user_effective_project_member(
+    db: Session,
+    project_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> bool:
+    """
+    Check if a user is an effective member of a project (either directly or via an assigned team).
+    Uses lightweight indexed queries for maximum performance.
+    """
+    # 1. Check direct project membership
+    direct = (
+        db.query(ProjectMember.user_id)
+        .filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id,
+        )
+        .first()
+    )
+    if direct is not None:
+        return True
+
+    # 2. Check membership in any team assigned to this project
+    team_member = (
+        db.query(TeamMember.user_id)
+        .join(ProjectTeam, ProjectTeam.team_id == TeamMember.team_id)
+        .filter(
+            ProjectTeam.project_id == project_id,
+            TeamMember.user_id == user_id,
+        )
+        .first()
+    )
+    return team_member is not None
+
 

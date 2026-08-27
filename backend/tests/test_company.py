@@ -891,4 +891,163 @@ def test_concurrent_last_owner_leave_and_removal_race_condition():
         verify_db.close()
 
 
+@patch("app.services.company_invitation.send_company_invitation_email")
+def test_invitation_revoked_and_expired_reinvite_lifecycle(mock_send_email):
+    """
+    Comprehensive test for invitation lifecycle:
+    1. PENDING invitation + duplicate email (case-insensitive) -> reject duplicate (400)
+    2. REVOKED invitation + same email -> allow new invitation (201)
+    3. Old revoked token cannot be accepted (400)
+    4. New invitation gets new secure token and can be accepted (200)
+    5. Existing invitation history is preserved
+    6. ACCEPTED user (now a member) cannot be re-invited (400)
+    7. EXPIRED invitation allows new invitation (201)
+    """
+    suffix = uuid.uuid4().hex[:8]
+    owner = _create_and_login_user(f"reinv_own_{suffix}", "Reinvite Owner")
+    kailash_user = _create_and_login_user(f"kailash_{suffix}", "Kailash Sharma")
+
+    # 1. Create company
+    create_res = client.post(
+        "/companies",
+        headers=owner["headers"],
+        json={"name": f"Reinvite Corp {suffix}"},
+    )
+    assert create_res.status_code == 201
+    company_id = create_res.json()["id"]
+
+    email = kailash_user["email"]
+
+    # 2. Invite Kailash -> status = PENDING
+    inv1_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=owner["headers"],
+        json={"email": email, "role": "MEMBER", "designation": "Backend Engineer"},
+    )
+    assert inv1_res.status_code == 201
+    inv1_data = inv1_res.json()
+    inv1_id = inv1_data["id"]
+    assert inv1_data["status"] == "PENDING"
+    assert inv1_data["email"] == email.lower()
+
+    # Get the raw token generated for inv1 from service or mock call if needed
+    # We can inspect the mock_send_email call arguments
+    assert mock_send_email.called
+    inv1_url = mock_send_email.call_args.kwargs["invitation_url"]
+    inv1_token = inv1_url.split("token=")[-1]
+
+    # 3. Duplicate PENDING invitation for same email (exact match) -> 400 Bad Request
+    dup_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=owner["headers"],
+        json={"email": email, "role": "MEMBER"},
+    )
+    assert dup_res.status_code == 400
+    assert "A pending invitation already exists for this email." in dup_res.json()["detail"]
+
+    # 4. Duplicate PENDING invitation with uppercase/case-insensitive email -> 400 Bad Request
+    dup_case_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=owner["headers"],
+        json={"email": email.upper(), "role": "MEMBER"},
+    )
+    assert dup_case_res.status_code == 400
+    assert "A pending invitation already exists for this email." in dup_case_res.json()["detail"]
+
+    # 5. Revoke the invitation -> Status becomes REVOKED
+    revoke_res = client.post(
+        f"/companies/{company_id}/invitations/{inv1_id}/revoke",
+        headers=owner["headers"],
+    )
+    assert revoke_res.status_code == 200
+    assert revoke_res.json()["status"] == "REVOKED"
+
+    # 6. Re-invite Kailash after revocation -> SHOULD SUCCEED with a NEW invitation (201 Created)
+    inv2_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=owner["headers"],
+        json={"email": email, "role": "MEMBER", "designation": "Senior Backend Engineer"},
+    )
+    assert inv2_res.status_code == 201
+    inv2_data = inv2_res.json()
+    inv2_id = inv2_data["id"]
+    assert inv2_id != inv1_id  # Brand new invitation record
+    assert inv2_data["status"] == "PENDING"
+    assert inv2_data["designation"] == "Senior Backend Engineer"
+
+    inv2_url = mock_send_email.call_args.kwargs["invitation_url"]
+    inv2_token = inv2_url.split("token=")[-1]
+    assert inv2_token != inv1_token  # Brand new raw token generated
+
+    # 7. Old revoked token CANNOT be used to accept invitation -> 400 Bad Request
+    old_accept_res = client.post(
+        f"/companies/invitations/accept/{inv1_token}",
+        headers=kailash_user["headers"],
+    )
+    assert old_accept_res.status_code == 400
+    assert "revoked" in old_accept_res.json()["detail"].lower()
+
+    # 8. New invitation token CAN be accepted -> 200 OK
+    new_accept_res = client.post(
+        f"/companies/invitations/accept/{inv2_token}",
+        headers=kailash_user["headers"],
+    )
+    assert new_accept_res.status_code == 200
+    assert new_accept_res.json()["status"] == "ACCEPTED"
+
+    # 9. Verify history: Both invitation records (REVOKED and ACCEPTED) are preserved
+    history_res = client.get(
+        f"/companies/{company_id}/invitations",
+        headers=owner["headers"],
+    )
+    assert history_res.status_code == 200
+    history_items = history_res.json()["items"] if "items" in history_res.json() else history_res.json()
+    kailash_invs = [i for i in history_items if i["email"] == email.lower()]
+    assert len(kailash_invs) == 2
+    statuses = {i["status"] for i in kailash_invs}
+    assert statuses == {"REVOKED", "ACCEPTED"}
+
+    # 10. Trying to invite Kailash again now that they are an ACCEPTED member -> 400 Bad Request
+    member_inv_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=owner["headers"],
+        json={"email": email, "role": "MEMBER"},
+    )
+    assert member_inv_res.status_code == 400
+    assert "already a member" in member_inv_res.json()["detail"].lower()
+
+    # 11. EXPIRED invitation re-invite test:
+    # Create an expired invitation for another user
+    expired_user_suffix = uuid.uuid4().hex[:8]
+    expired_email = f"expired_{expired_user_suffix}@example.com"
+    inv_exp_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=owner["headers"],
+        json={"email": expired_email, "role": "MEMBER"},
+    )
+    assert inv_exp_res.status_code == 201
+    exp_inv_id = inv_exp_res.json()["id"]
+
+    # Manually expire the invitation timestamp in database
+    exp_db = SessionLocal()
+    try:
+        from app.repositories.company_invitation import get_invitation_by_id
+        db_inv = get_invitation_by_id(exp_db, uuid.UUID(exp_inv_id))
+        db_inv.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        exp_db.commit()
+    finally:
+        exp_db.close()
+
+    # Re-inviting the expired email -> Should auto-expire old and succeed with a new PENDING invitation (201)
+    reinv_exp_res = client.post(
+        f"/companies/{company_id}/invitations",
+        headers=owner["headers"],
+        json={"email": expired_email, "role": "MEMBER", "designation": "Staff Engineer"},
+    )
+    assert reinv_exp_res.status_code == 201
+    assert reinv_exp_res.json()["status"] == "PENDING"
+    assert reinv_exp_res.json()["id"] != exp_inv_id
+
+
+
 

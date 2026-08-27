@@ -200,3 +200,19 @@ export const removeProjectMemberApi = async (companyId, projectId, userId) => {
   return response.data;
 };
 
+/**
+ * Get project activity audit timeline with pagination
+ * @param {string} companyId - UUID of the company
+ * @param {string} projectId - UUID of the project
+ * @param {Object} params - { page?, limit? }
+ * @returns {Promise<Object>} - Paginated response { items, total, page, limit, total_pages }
+ */
+export const getProjectActivityApi = async (companyId, projectId, params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.page) queryParams.append('page', params.page);
+  if (params.limit) queryParams.append('limit', params.limit);
+  const url = `/companies/${companyId}/projects/${projectId}/activity${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  const response = await api.get(url);
+  return response.data;
+};
+

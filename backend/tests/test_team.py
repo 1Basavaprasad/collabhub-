@@ -244,6 +244,12 @@ def test_team_lifecycle_permissions_and_membership():
     assert "MEMBER_ADDED" in actions
     assert "LEADERSHIP_TRANSFERRED" in actions
 
+    # Verify that LEADERSHIP_TRANSFERRED contains the person's name and never the raw user UUID
+    lead_act = next(a for a in activities if a["action"] == "LEADERSHIP_TRANSFERRED")
+    assert "Team leadership was transferred to" in lead_act["details"]
+    assert str(member["id"]) not in lead_act["details"]
+    assert "Rahul" in lead_act["details"]
+
     # 13. Delete team
     delete_res = client.delete(
         f"/companies/{company_id}/teams/{auto_team_id}",

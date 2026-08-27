@@ -12,6 +12,7 @@ import Badge from '../components/Badge';
 import Modal from '../components/Modal';
 import Avatar, { getDisplayName } from '../components/Avatar';
 import { getTeamApi } from '../api/teamApi';
+import TeamChat from '../components/team/TeamChat';
 import {
   Users2,
   Users,
@@ -28,6 +29,7 @@ import {
   MoreVertical,
   Check,
   Activity,
+  MessageSquare,
   Archive,
   RotateCcw,
   Sparkles,
@@ -366,6 +368,40 @@ const Teams = () => {
     }
   };
 
+  // Format activity details ensuring user UUIDs are never exposed in UI
+  const formatActivityDetails = (act) => {
+    if (!act || !act.details) return '';
+    let text = act.details;
+
+    // Build lookup map of user IDs to names
+    const memberMap = new Map();
+    if (selectedTeam?.members) {
+      selectedTeam.members.forEach((m) => {
+        const u = m.user;
+        const name = getDisplayName(u);
+        if (u?.id && name) memberMap.set(u.id, name);
+        if (m.user_id && name && !memberMap.has(m.user_id)) memberMap.set(m.user_id, name);
+      });
+    }
+    if (companyMembers) {
+      companyMembers.forEach((m) => {
+        const u = m.user;
+        const name = getDisplayName(u);
+        if (u?.id && name) memberMap.set(u.id, name);
+      });
+    }
+
+    const uuidRegex = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
+    text = text.replace(uuidRegex, (match) => {
+      return memberMap.get(match) || 'team member';
+    });
+
+    text = text.replace(/\bto\s+user\s+/gi, 'to ');
+    text = text.replace(/\buser\s+([A-Za-z])/gi, '$1');
+
+    return text;
+  };
+
   // Open Edit Team Modal
   const handleOpenEditModal = (targetTeam = selectedTeam) => {
     if (!targetTeam) return;
@@ -663,7 +699,7 @@ const Teams = () => {
   };
 
   return (
-    <div className="h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
+    <div className="h-screen bg-[#F4F6FA] dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
       {/* Top SaaS Navbar */}
       <Navbar onToggleSidebar={() => setSidebarOpen((prev) => !prev)} />
 
@@ -850,23 +886,23 @@ const Teams = () => {
                   const colorMeta = getColorClasses(selectedTeam.color);
 
                   return (
-                    <Card className="p-6 sm:p-7 border border-slate-200/80 dark:border-[#263449] shadow-xs">
-                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-                        <div className="space-y-3.5 max-w-3xl">
-                          <div className="flex items-start gap-4">
+                    <Card className="p-4 sm:p-5 border border-slate-200/80 dark:border-[#263449] shadow-xs">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-2 max-w-3xl">
+                          <div className="flex items-center gap-3">
                             <div
-                              className={`flex h-14 w-14 items-center justify-center rounded-2xl ${colorMeta.bg} text-white font-bold text-xl shadow-xs shrink-0`}
+                              className={`flex h-11 w-11 items-center justify-center rounded-xl ${colorMeta.bg} text-white font-bold text-lg shadow-xs shrink-0`}
                             >
-                              <IconComp className="h-7 w-7" />
+                              <IconComp className="h-5 w-5" />
                             </div>
                             <div className="min-w-0">
-                              <div className="flex items-center gap-3 flex-wrap">
-                                <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-[#F8FAFC] tracking-tight">
+                              <div className="flex items-center gap-2.5 flex-wrap">
+                                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-[#F8FAFC] tracking-tight">
                                   {selectedTeam.name}
                                 </h1>
                                 <div className="flex items-center gap-1.5">
                                   <span
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium ${
                                       selectedTeam.is_archived
                                         ? 'bg-slate-100 dark:bg-[#1B263A] text-slate-600 dark:text-[#CBD5E1] border border-slate-200 dark:border-[#263449]'
                                         : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20'
@@ -882,7 +918,7 @@ const Teams = () => {
                                 </div>
                               </div>
 
-                              <p className="text-xs text-slate-500 dark:text-[#94A3B8] font-mono mt-1">
+                              <p className="text-xs text-slate-500 dark:text-[#94A3B8] font-mono mt-0.5">
                                 Workspace Team &bull; Created{' '}
                                 {selectedTeam.created_at
                                   ? new Date(selectedTeam.created_at).toLocaleDateString('en-US', {
@@ -895,27 +931,29 @@ const Teams = () => {
                             </div>
                           </div>
 
-                          <p className="text-xs sm:text-sm text-slate-600 dark:text-[#CBD5E1] leading-relaxed pt-1 max-w-2xl">
-                            {selectedTeam.description || 'No description has been added for this team.'}
-                          </p>
+                          {selectedTeam.description && (
+                            <p className="text-xs sm:text-sm text-slate-600 dark:text-[#CBD5E1] leading-relaxed max-w-2xl">
+                              {selectedTeam.description}
+                            </p>
+                          )}
                         </div>
 
                         {/* Summary Metric Ribbon */}
-                        <div className="flex items-center gap-6 bg-slate-50/90 dark:bg-[#1B263A]/40 p-4 sm:p-5 rounded-xl border border-slate-200/70 dark:border-[#263449] shrink-0 self-start md:self-auto">
+                        <div className="flex items-center gap-5 bg-slate-50/90 dark:bg-[#1B263A]/40 px-4 py-3 rounded-xl border border-slate-200/70 dark:border-[#263449] shrink-0 self-start md:self-auto">
                           <div className="space-y-0.5">
                             <span className="text-[10px] uppercase font-mono font-medium tracking-wider text-slate-400 dark:text-[#94A3B8]">
                               Members
                             </span>
-                            <p className="text-2xl font-semibold text-slate-900 dark:text-[#F8FAFC] font-mono">
+                            <p className="text-xl font-bold text-slate-900 dark:text-[#F8FAFC] font-mono">
                               {selectedTeam.member_count || selectedTeam.members?.length || 0}
                             </p>
                           </div>
-                          <div className="h-9 w-px bg-slate-200 dark:bg-[#263449]" />
+                          <div className="h-8 w-px bg-slate-200 dark:bg-[#263449]" />
                           <div className="space-y-0.5">
                             <span className="text-[10px] uppercase font-mono font-medium tracking-wider text-slate-400 dark:text-[#94A3B8]">
                               Team Leads
                             </span>
-                            <p className="text-2xl font-semibold text-indigo-600 dark:text-indigo-400 font-mono">
+                            <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400 font-mono">
                               {selectedTeam.leads?.length || 0}
                             </p>
                           </div>
@@ -954,6 +992,19 @@ const Teams = () => {
                     <span className="px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-[#1B263A] text-slate-700 dark:text-[#CBD5E1] font-mono text-[10px]">
                       {selectedTeam.members?.length || selectedTeam.member_count || 0}
                     </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('chat')}
+                    className={`pb-3.5 px-1 border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+                      activeTab === 'chat'
+                        ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold'
+                        : 'border-transparent text-slate-500 dark:text-[#94A3B8] hover:text-slate-800 dark:hover:text-[#F8FAFC]'
+                    }`}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    <span>Chat</span>
                   </button>
 
                   <button
@@ -1319,7 +1370,19 @@ const Teams = () => {
                   </div>
                 )}
 
-                {/* TAB 3: REAL ACTIVITY AUDIT LOG (Clean timeline) */}
+                {/* TAB 3: TEAM CHAT */}
+                {activeTab === 'chat' && (
+                  <div className="animate-fade-in">
+                    <TeamChat
+                      team={selectedTeam}
+                      teamMembers={selectedTeam.members || []}
+                      allTeams={teams || []}
+                      onSelectTeam={(t) => navigate(`/teams/${t.id}`)}
+                    />
+                  </div>
+                )}
+
+                {/* TAB 4: REAL ACTIVITY AUDIT LOG (Clean timeline) */}
                 {activeTab === 'activity' && (
                   <Card className="p-6 space-y-4 animate-fade-in border border-slate-200/80 dark:border-[#263449] shadow-xs">
                     <div className="flex items-center justify-between">
@@ -1365,7 +1428,7 @@ const Teams = () => {
                                   <span className="font-mono font-medium text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-1.5 py-0.5 rounded text-[10px] mr-1.5">
                                     {act.action}
                                   </span>
-                                  {act.details || ''}
+                                  {formatActivityDetails(act)}
                                 </p>
                               </div>
                             </div>
@@ -1573,7 +1636,7 @@ const Teams = () => {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search teams..."
-                        className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 dark:bg-[#0F172A] border border-slate-200/80 dark:border-[#263449] rounded-xl text-slate-800 dark:text-[#F8FAFC] placeholder:text-slate-400 dark:placeholder:text-[#64748B] focus:outline-none focus:border-indigo-500 transition-colors"
+                        className="w-full pl-8 pr-7 py-1.5 text-xs bg-[#F8F9FC] dark:bg-[#0F172A] border border-slate-200/80 dark:border-[#263449] rounded-xl text-slate-800 dark:text-[#F8FAFC] placeholder:text-slate-400 dark:placeholder:text-[#64748B] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                       />
                       {searchQuery && (
                         <button
@@ -1588,7 +1651,7 @@ const Teams = () => {
                     <select
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value)}
-                      className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-[#0F172A] border border-slate-200/80 dark:border-[#263449] rounded-xl text-slate-700 dark:text-[#CBD5E1] focus:outline-none focus:border-indigo-500 font-medium cursor-pointer"
+                      className="px-3 py-1.5 text-xs bg-[#F8F9FC] dark:bg-[#0F172A] border border-slate-200/80 dark:border-[#263449] rounded-xl text-slate-700 dark:text-[#CBD5E1] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium cursor-pointer transition-all"
                     >
                       <option value="name">Name (A-Z)</option>
                       <option value="recent">Recently Created</option>

@@ -89,7 +89,7 @@ def get_pending_invitation(
     return db.scalar(
         select(CompanyInvitation).where(
             CompanyInvitation.company_id == company_id,
-            CompanyInvitation.email == email,
+            func.lower(CompanyInvitation.email) == email.strip().lower(),
             CompanyInvitation.status == InvitationStatus.PENDING,
         )
     )

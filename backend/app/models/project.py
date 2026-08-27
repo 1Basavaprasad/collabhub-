@@ -11,8 +11,10 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.company import Company
+    from app.models.project_activity import ProjectActivity
     from app.models.project_member import ProjectMember
     from app.models.project_team import ProjectTeam
+    from app.models.task import Task
     from app.models.user import User
 
 
@@ -114,6 +116,20 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
         order_by="desc(ProjectMember.created_at)",
+    )
+
+    tasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="asc(Task.position)",
+    )
+
+    activities: Mapped[list["ProjectActivity"]] = relationship(
+        "ProjectActivity",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="desc(ProjectActivity.created_at)",
     )
 
     __table_args__ = (

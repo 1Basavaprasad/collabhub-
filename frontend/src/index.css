@@ -7,20 +7,21 @@
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     --font-display: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     
-    --bg-app: #f8fafc;
-    --bg-secondary: #f1f5f9;
+    --bg-app: #f4f6fa;
+    --bg-secondary: #f8f9fc;
     --bg-sidebar: #ffffff;
     --bg-surface: #ffffff;
     --bg-elevated: #ffffff;
     --border-color: #e2e8f0;
     --border-hover: #cbd5e1;
-    --hover-bg: #f8fafc;
+    --hover-bg: #f3f4fd;
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --text-muted: #94a3b8;
     --color-primary: #4f46e5;
     --color-primary-hover: #4338ca;
-    --skeleton-base: #f1f5f9;
+    --color-primary-light: #eef2ff;
+    --skeleton-base: #f1f4f9;
     --skeleton-highlight: #e2e8f0;
   }
 
@@ -39,6 +40,7 @@
     --text-disabled: #64748B;
     --color-primary: #6366F1;
     --color-primary-hover: #818CF8;
+    --color-primary-light: #1e1b4b;
     --skeleton-base: #182235;
     --skeleton-highlight: #223049;
   }
@@ -50,7 +52,7 @@
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    transition: background-color 150ms ease, color 150ms ease;
+    transition: background-color 150ms ease-out, color 150ms ease-out;
   }
 
   .dark body,
@@ -95,42 +97,54 @@
 
 /* Light & Dark SaaS Background Accents */
 .bg-mesh {
-  background: 
+  background-color: #f4f6fa;
+  background-image: 
     radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.03) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(79, 70, 229, 0.02) 0px, transparent 50%),
-    #f8fafc;
+    radial-gradient(at 100% 0%, rgba(79, 70, 229, 0.015) 0px, transparent 50%);
 }
 
 .dark .bg-mesh {
-  background: 
+  background-color: #0B1120;
+  background-image: 
     radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.04) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(129, 140, 248, 0.03) 0px, transparent 50%),
-    #0B1120;
+    radial-gradient(at 100% 0%, rgba(129, 140, 248, 0.03) 0px, transparent 50%);
 }
 
 .bg-mesh-card {
-  background: 
-    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.02) 0px, transparent 40%),
-    #ffffff;
+  background-color: #ffffff;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.015) 0px, transparent 40%);
 }
 
 .dark .bg-mesh-card {
-  background: 
-    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.03) 0px, transparent 40%),
-    #151F32;
+  background-color: #151F32;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.03) 0px, transparent 40%);
 }
 
 /* Card Surface Utilities */
 .card-base {
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
+  transition: all 150ms ease-out;
 }
 
 .dark .card-base {
   background: #151F32;
   border: 1px solid #263449;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.surface-secondary {
+  background-color: #f8f9fc;
+  border: 1px solid #e2e8f0;
+}
+
+.dark .surface-secondary {
+  background-color: #0F172A;
+  border: 1px solid #263449;
 }
 
 /* Keyframes & Motion (150-200ms) */

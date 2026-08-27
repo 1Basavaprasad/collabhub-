@@ -1,6 +1,8 @@
+import re
 import uuid
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.company import Company
@@ -8,6 +10,7 @@ from app.models.company_member import CompanyMember, CompanyRole
 from app.models.team import Team
 from app.models.team_activity import TeamActivity
 from app.models.team_member import TeamMember, TeamRole
+from app.models.user import User
 from app.repositories.company import get_company_by_id, get_company_membership
 from app.repositories.team import (
     add_team_member,
@@ -517,12 +520,19 @@ def transfer_leadership_service(
         new_lead_member=new_lead_member,
     )
 
+    target_name = (
+        new_lead_member.user.full_name
+        or new_lead_member.user.username
+        if new_lead_member and new_lead_member.user
+        else "team member"
+    )
+
     log_team_activity(
         db=db,
         team_id=team_id,
         actor_user_id=current_user_id,
         action="LEADERSHIP_TRANSFERRED",
-        details=f"Team leadership was transferred to user {data.new_lead_user_id}.",
+        details=f"Team leadership was transferred to {target_name}.",
     )
 
     return {"message": "Team leadership transferred successfully.", "new_lead_user_id": data.new_lead_user_id}
@@ -658,6 +668,44 @@ def get_team_members_service(
     )
 
 
+def _resolve_activity_details(db: Session, activities: list[TeamActivity]) -> list[TeamActivity]:
+    uuid_pattern = re.compile(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    )
+
+    all_uuids: set[uuid.UUID] = set()
+    for act in activities:
+        if act.details:
+            matches = uuid_pattern.findall(act.details)
+            for m in matches:
+                try:
+                    all_uuids.add(uuid.UUID(m))
+                except (ValueError, TypeError):
+                    pass
+
+    if not all_uuids:
+        return activities
+
+    users_stmt = select(User).where(User.id.in_(all_uuids))
+    users = list(db.execute(users_stmt).scalars().all())
+    user_map = {str(u.id): (u.full_name or u.username or "member") for u in users if u}
+
+    for act in activities:
+        if act.details:
+            details_str = act.details
+            for uid_str, user_display_name in user_map.items():
+                if uid_str in details_str:
+                    details_str = re.sub(
+                        rf"(?i)\buser\s+{re.escape(uid_str)}\b",
+                        user_display_name,
+                        details_str,
+                    )
+                    details_str = details_str.replace(uid_str, user_display_name)
+            act.details = details_str
+
+    return activities
+
+
 def get_team_activity_service(
     db: Session,
     current_user_id: uuid.UUID,
@@ -675,9 +723,13 @@ def get_team_activity_service(
             detail="Team not found in this company workspace.",
         )
 
-    return get_team_activities(
+    activities, total = get_team_activities(
         db=db,
         team_id=team_id,
         page=page,
         limit=limit,
     )
+
+    activities = _resolve_activity_details(db, activities)
+
+    return activities, total

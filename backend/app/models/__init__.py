@@ -9,9 +9,15 @@ from app.models.company_invitation import CompanyInvitation, InvitationStatus
 from app.models.team import Team
 from app.models.team_member import TeamMember, TeamRole
 from app.models.team_activity import TeamActivity
+from app.models.team_chat_message import TeamChatMessage
+from app.models.team_chat_reaction import TeamChatReaction
+from app.models.team_chat_mention import TeamChatMention
+from app.models.team_chat_read import TeamChatRead
 from app.models.project import Project, ProjectStatus
+from app.models.project_activity import ProjectActivity
 from app.models.project_team import ProjectTeam
 from app.models.project_member import ProjectMember
+from app.models.task import Task, TaskStatus, TaskPriority
 
 __all__ = [
     "Base",
@@ -26,8 +32,16 @@ __all__ = [
     "TeamMember",
     "TeamRole",
     "TeamActivity",
+    "TeamChatMessage",
+    "TeamChatReaction",
+    "TeamChatMention",
+    "TeamChatRead",
     "Project",
     "ProjectStatus",
+    "ProjectActivity",
     "ProjectTeam",
     "ProjectMember",
+    "Task",
+    "TaskStatus",
+    "TaskPriority",
 ]

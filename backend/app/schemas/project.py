@@ -179,3 +179,20 @@ class ProjectDetailResponse(ProjectResponse):
     direct_members: list[ProjectMemberResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProjectActivityResponse(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    company_id: uuid.UUID
+    actor_user_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
+    target_user_id: uuid.UUID | None = None
+    action: str
+    details: str | None = None
+    event_metadata: str | None = None
+    created_at: datetime
+    actor: ProjectUserSummary | None = None
+    target_user: ProjectUserSummary | None = None
+
+    model_config = ConfigDict(from_attributes=True)

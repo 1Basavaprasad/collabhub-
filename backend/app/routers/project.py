@@ -8,6 +8,7 @@ from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.project import (
+    ProjectActivityResponse,
     ProjectCreate,
     ProjectDetailResponse,
     ProjectEffectiveMemberResponse,
@@ -26,6 +27,7 @@ from app.services.project import (
     delete_project_service,
     get_company_projects_service,
     get_effective_project_members_service,
+    get_project_activity_service,
     get_project_service,
     list_project_members_service,
     list_project_teams_service,
@@ -369,5 +371,35 @@ def remove_project_member(
         company_id=company_id,
         project_id=project_id,
         user_id=user_id,
+    )
+
+
+@router.get(
+    "/{project_id}/activity",
+    response_model=PaginatedResponse[ProjectActivityResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get project activity audit timeline with pagination",
+)
+def get_project_activity(
+    company_id: uuid.UUID,
+    project_id: uuid.UUID,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(50, ge=1, le=100, description="Items per page (max 100)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    items, total = get_project_activity_service(
+        db=db,
+        current_user_id=current_user.id,
+        company_id=company_id,
+        project_id=project_id,
+        page=page,
+        limit=limit,
+    )
+    return PaginatedResponse.create(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
     )
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Building2,
   Users2,
+  Mail,
   FolderKanban,
   CheckSquare,
   User,
@@ -15,12 +16,11 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
-  Mail,
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const { user, logout } = useAuth();
-  const { company } = useCompany();
+  const { company, invitations = [] } = useCompany();
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -29,6 +29,14 @@ const Sidebar = ({ isOpen, onClose }) => {
     logout();
     navigate('/login');
   };
+
+  // Pending invitations count (updates dynamically on create/accept/revoke/expire)
+  const pendingInvitationsCount = useMemo(() => {
+    if (!Array.isArray(invitations)) return 0;
+    return invitations.filter(
+      (inv) => inv && (inv.status || '').toUpperCase() === 'PENDING'
+    ).length;
+  }, [invitations]);
 
   const workspaceNav = [
     {
@@ -57,10 +65,11 @@ const Sidebar = ({ isOpen, onClose }) => {
       icon: Mail,
       disabled: false,
       matchTab: 'invitations',
+      badgeCount: pendingInvitationsCount > 0 ? pendingInvitationsCount : null,
     },
   ];
 
-  const collaborationNav = [
+  const workNav = [
     {
       name: 'Teams',
       to: '/teams',
@@ -74,16 +83,16 @@ const Sidebar = ({ isOpen, onClose }) => {
       disabled: false,
     },
     {
-      name: 'Tasks',
+      name: 'My Tasks',
+      to: '/tasks',
       icon: CheckSquare,
-      disabled: true,
-      tooltip: 'Tasks module coming soon',
+      disabled: false,
     },
   ];
 
   const accountNav = [
     {
-      name: 'User Profile',
+      name: 'Profile',
       to: '/profile',
       icon: User,
       disabled: false,
@@ -99,10 +108,16 @@ const Sidebar = ({ isOpen, onClose }) => {
   const isItemActive = (item) => {
     if (!item.to) return false;
     if (item.exactMatch) {
-      return location.pathname === '/company' && (!location.search || location.search.includes('tab=overview'));
+      return (
+        location.pathname === '/company' &&
+        (!location.search || location.search.includes('tab=overview'))
+      );
     }
     if (item.matchTab) {
-      return location.pathname === '/company' && location.search.includes(`tab=${item.matchTab}`);
+      return (
+        location.pathname === '/company' &&
+        location.search.includes(`tab=${item.matchTab}`)
+      );
     }
     return location.pathname.startsWith(item.to);
   };
@@ -117,8 +132,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           <div
             key={item.name}
             className={`flex items-center ${
-              isCollapsed ? 'justify-center px-2 py-2' : 'justify-between px-3 py-1.5'
-            } rounded-lg text-xs font-medium text-slate-400 dark:text-[#64748B] cursor-not-allowed select-none group relative`}
+              isCollapsed ? 'justify-center px-2 py-2' : 'justify-between px-3 py-2'
+            } rounded-xl text-xs font-medium text-slate-400 dark:text-[#64748B] cursor-not-allowed select-none group relative`}
             title={item.tooltip}
           >
             <div className="flex items-center gap-2.5">
@@ -131,7 +146,7 @@ const Sidebar = ({ isOpen, onClose }) => {
               </span>
             )}
             {isCollapsed && (
-              <div className="absolute left-full ml-2 px-2.5 py-1 bg-slate-900 dark:bg-[#1B263A] text-white text-[11px] font-medium rounded-md shadow-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 border border-slate-700 dark:border-[#263449]">
+              <div className="absolute left-full ml-2 px-2.5 py-1 bg-slate-900 dark:bg-[#1B263A] text-white text-[11px] font-medium rounded-xl shadow-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 border border-slate-700 dark:border-[#263449]">
                 {item.name} (Coming soon)
               </div>
             )}
@@ -145,27 +160,42 @@ const Sidebar = ({ isOpen, onClose }) => {
           to={item.to}
           onClick={onClose}
           className={`flex items-center ${
-            isCollapsed ? 'justify-center px-2 py-2' : 'justify-between px-3 py-1.5'
-          } rounded-lg text-xs font-medium transition-all group relative ${
+            isCollapsed ? 'justify-center px-2 py-2' : 'justify-between px-3 py-2'
+          } rounded-xl text-xs font-medium transition-all duration-150 group relative ${
             active
-              ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-medium shadow-2xs border-l-2 border-indigo-600 dark:border-indigo-500'
-              : 'text-slate-600 dark:text-[#CBD5E1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/70 dark:hover:bg-[#202D43]'
+              ? 'bg-indigo-50/90 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold shadow-2xs border-l-2 border-indigo-600 dark:border-indigo-500'
+              : 'text-slate-600 dark:text-[#CBD5E1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-[#1A2538]'
           }`}
           title={isCollapsed ? item.name : undefined}
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
             <Icon
               className={`h-4 w-4 shrink-0 ${
-                active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-[#94A3B8] group-hover:text-slate-600 dark:group-hover:text-slate-200'
+                active
+                  ? 'text-indigo-600 dark:text-indigo-400'
+                  : 'text-slate-400 dark:text-[#94A3B8] group-hover:text-slate-600 dark:group-hover:text-slate-200'
               }`}
             />
-            {!isCollapsed && <span>{item.name}</span>}
+            {!isCollapsed && <span className="truncate">{item.name}</span>}
           </div>
+
+          {/* Pending Invitations Badge */}
+          {item.badgeCount && (
+            <>
+              {!isCollapsed ? (
+                <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-indigo-600 dark:bg-indigo-500 text-white shrink-0 shadow-2xs font-mono">
+                  {item.badgeCount}
+                </span>
+              ) : (
+                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-[#0D1526]" />
+              )}
+            </>
+          )}
 
           {/* Collapsed Tooltip */}
           {isCollapsed && (
-            <div className="absolute left-full ml-2 px-2.5 py-1 bg-slate-900 dark:bg-[#1B263A] text-white text-[11px] font-medium rounded-md shadow-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 border border-slate-700 dark:border-[#263449]">
-              {item.name}
+            <div className="absolute left-full ml-2 px-2.5 py-1 bg-slate-900 dark:bg-[#1B263A] text-white text-[11px] font-medium rounded-xl shadow-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 border border-slate-700 dark:border-[#263449]">
+              {item.name} {item.badgeCount ? `(${item.badgeCount})` : ''}
             </div>
           )}
         </NavLink>
@@ -192,10 +222,9 @@ const Sidebar = ({ isOpen, onClose }) => {
           isOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full'
         }`}
       >
-        {/* Top Section */}
+        {/* Top Navigation Sections */}
         <div className="flex-1 overflow-y-auto py-3">
-          
-          {/* Brand Header in Sidebar */}
+          {/* Brand Header */}
           <div className="flex items-center justify-between px-3.5 mb-3 pb-3 border-b border-slate-100 dark:border-[#263449]">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-xs shadow-xs">
@@ -238,27 +267,27 @@ const Sidebar = ({ isOpen, onClose }) => {
           {/* SECTION 1: WORKSPACE */}
           <div className="px-2.5 space-y-0.5">
             {!isCollapsed && (
-              <div className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] font-mono">
+              <div className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-[#8292A9] font-mono">
                 Workspace
               </div>
             )}
             {renderNavSection(workspaceNav)}
           </div>
 
-          {/* SECTION 2: COLLABORATION */}
+          {/* SECTION 2: WORK */}
           <div className="px-2.5 pt-3 mt-3 space-y-0.5 border-t border-slate-100 dark:border-[#263449]">
             {!isCollapsed && (
-              <div className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] font-mono">
-                Collaboration
+              <div className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-[#8292A9] font-mono">
+                Work
               </div>
             )}
-            {renderNavSection(collaborationNav)}
+            {renderNavSection(workNav)}
           </div>
 
           {/* SECTION 3: ACCOUNT */}
           <div className="px-2.5 pt-3 mt-3 space-y-0.5 border-t border-slate-100 dark:border-[#263449]">
             {!isCollapsed && (
-              <div className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] font-mono">
+              <div className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-[#8292A9] font-mono">
                 Account
               </div>
             )}
@@ -269,7 +298,11 @@ const Sidebar = ({ isOpen, onClose }) => {
         {/* Bottom User Profile Section */}
         <div className="p-2.5 border-t border-slate-100 dark:border-[#263449] bg-slate-50/50 dark:bg-[#0B1120]/50 space-y-1.5">
           {user && (
-            <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-2 px-1.5'}`}>
+            <div
+              className={`flex items-center ${
+                isCollapsed ? 'justify-center' : 'gap-2 px-1.5'
+              }`}
+            >
               <Avatar user={user} size="xs" variant="indigo-solid" />
               {!isCollapsed && (
                 <div className="min-w-0 flex-1">

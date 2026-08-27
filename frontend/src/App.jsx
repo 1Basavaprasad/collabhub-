@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { CompanyProvider } from './context/CompanyContext';
 import { TeamProvider } from './context/TeamContext';
 import { ProjectProvider } from './context/ProjectContext';
+import { TaskProvider } from './context/TaskContext';
 import { ToastProvider } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -16,6 +17,7 @@ import Dashboard from './pages/Dashboard';
 import Company from './pages/Company';
 import Teams from './pages/Teams';
 import Projects from './pages/Projects';
+import MyTasks from './pages/MyTasks';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import AcceptInvitation from './pages/AcceptInvitation';
@@ -30,8 +32,9 @@ function App() {
             <CompanyProvider>
               <TeamProvider>
                 <ProjectProvider>
-                  <ToastProvider>
-                  <Routes>
+                  <TaskProvider>
+                    <ToastProvider>
+                      <Routes>
                     {/* Public Routes - redirect to /dashboard if already authenticated */}
                     <Route element={<PublicRoute />}>
                       <Route path="/login" element={<Login />} />
@@ -48,6 +51,7 @@ function App() {
                       <Route path="/teams/:teamId" element={<Teams />} />
                       <Route path="/projects" element={<Projects />} />
                       <Route path="/projects/:projectId" element={<Projects />} />
+                      <Route path="/tasks" element={<MyTasks />} />
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/settings" element={<Settings />} />
                     </Route>
@@ -69,9 +73,10 @@ function App() {
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </ToastProvider>
-              </ProjectProvider>
-            </TeamProvider>
-          </CompanyProvider>
+              </TaskProvider>
+            </ProjectProvider>
+          </TeamProvider>
+        </CompanyProvider>
         </AuthProvider>
       </BrowserRouter>
       </ThemeProvider>

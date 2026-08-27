@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
 import { useTeam } from '../context/TeamContext';
 import { useProject } from '../context/ProjectContext';
+import { useTask } from '../context/TaskContext';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import StatCard from '../components/StatCard';
@@ -37,10 +38,17 @@ const Dashboard = () => {
   } = useCompany();
   const { teams = [] } = useTeam();
   const { projects = [] } = useProject();
+  const { myTasksSummary, fetchMyTasksSummary } = useTask();
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
+
+  useEffect(() => {
+    if (company?.id) {
+      fetchMyTasksSummary(company.id);
+    }
+  }, [company?.id, fetchMyTasksSummary]);
 
   // Personalized Greeting
   const getGreeting = () => {
@@ -93,15 +101,16 @@ const Dashboard = () => {
     {
       step: '04',
       title: 'Tasks',
-      desc: 'Task tracking, assignments, and activity feed.',
+      desc: 'Accountability, Kanban deliverables, and task tracking.',
       icon: CheckSquare,
-      ready: false,
-      status: 'Coming soon',
+      ready: true,
+      status: 'Active',
+      link: '/tasks',
     },
   ];
 
   return (
-    <div className="h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
+    <div className="h-screen bg-[#F4F6FA] dark:bg-[#0B1120] flex flex-col text-slate-800 dark:text-[#CBD5E1] selection:bg-indigo-500 selection:text-white overflow-hidden">
       {/* Top SaaS Navbar */}
       <Navbar onToggleSidebar={() => setSidebarOpen((prev) => !prev)} />
 
@@ -123,12 +132,12 @@ const Dashboard = () => {
             </div>
 
             {/* Welcoming Header Banner */}
-            <div className="rounded-xl border border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#151F32] p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#151F32] p-6 sm:p-7 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
               <div>
-                <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 dark:text-[#F8FAFC]">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-[#F8FAFC]">
                   {getGreeting()}, {user?.full_name?.split(' ')[0] || user?.username || 'Teammate'} 👋
                 </h1>
-                <p className="mt-0.5 text-xs sm:text-sm text-slate-500 dark:text-[#94A3B8]">
+                <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-[#94A3B8]">
                   {hasCompany && company
                     ? `Here's what's happening in your ${company.name} workspace.`
                     : "Here's what's happening in your workspace. Set up your company to get started."}
@@ -265,8 +274,76 @@ const Dashboard = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  /* Organization Workspace Overview Card */
-                  <Card>
+                  <>
+                    {/* MY WORK Card */}
+                    <div className="bg-white dark:bg-[#131D2E] rounded-xl border border-slate-200/80 dark:border-[#202C3F] p-4 sm:p-5 shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-[#202C3F]">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                            <CheckSquare className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-[#F8FAFC]">
+                              My Work
+                            </h3>
+                            <p className="text-[11px] text-slate-500 dark:text-[#94A3B8]">
+                              Assigned tasks and accountable deadlines
+                            </p>
+                          </div>
+                        </div>
+
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          icon={ArrowRight}
+                          iconPosition="right"
+                          onClick={() => navigate('/tasks')}
+                        >
+                          View My Tasks
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                        <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#0B1322] border border-slate-200/60 dark:border-[#1E2A3C]">
+                          <span className="text-[10px] uppercase font-mono text-slate-400 dark:text-[#94A3B8] block">
+                            Assigned
+                          </span>
+                          <span className="text-lg font-bold text-slate-900 dark:text-[#F8FAFC] font-mono">
+                            {myTasksSummary?.assigned_to_me ?? 0}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#0B1322] border border-slate-200/60 dark:border-[#1E2A3C]">
+                          <span className="text-[10px] uppercase font-mono text-slate-400 dark:text-[#94A3B8] block">
+                            Due Today
+                          </span>
+                          <span className={`text-lg font-bold font-mono ${myTasksSummary?.due_today > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-[#F8FAFC]'}`}>
+                            {myTasksSummary?.due_today ?? 0}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#0B1322] border border-slate-200/60 dark:border-[#1E2A3C]">
+                          <span className="text-[10px] uppercase font-mono text-slate-400 dark:text-[#94A3B8] block">
+                            Overdue
+                          </span>
+                          <span className={`text-lg font-bold font-mono ${myTasksSummary?.overdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-[#F8FAFC]'}`}>
+                            {myTasksSummary?.overdue ?? 0}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#0B1322] border border-slate-200/60 dark:border-[#1E2A3C]">
+                          <span className="text-[10px] uppercase font-mono text-slate-400 dark:text-[#94A3B8] block">
+                            Completed
+                          </span>
+                          <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                            {myTasksSummary?.completed ?? 0}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Organization Workspace Overview Card */}
+                    <Card>
                     <CardHeader className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <CardTitle icon={Building2}>Organization Workspace</CardTitle>
@@ -287,9 +364,9 @@ const Dashboard = () => {
                     <CardContent className="space-y-4">
                       {/* Active Company Highlight */}
                       {hasCompany && company && (
-                        <div className="p-4 rounded-xl border border-slate-200/80 dark:border-[#263449] bg-slate-50/50 dark:bg-[#1B263A]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="p-4.5 rounded-xl border border-slate-200/80 dark:border-[#263449] bg-slate-50/70 dark:bg-[#1B263A]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="flex items-center gap-3.5 min-w-0">
-                            <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white dark:bg-[#151F32] border border-slate-200 dark:border-[#263449] shadow-2xs flex items-center justify-center">
+                            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-white dark:bg-[#151F32] border border-slate-200 dark:border-[#263449] shadow-2xs flex items-center justify-center">
                               {company.logo_url && !logoError ? (
                                 <img
                                   src={company.logo_url}
@@ -336,19 +413,19 @@ const Dashboard = () => {
                         <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] block">
                           Workspace Capabilities
                         </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {hierarchySteps.map((step) => {
                             const Icon = step.icon;
                             return (
                               <div
                                 key={step.title}
                                 onClick={() => step.link && navigate(step.link)}
-                                className={`p-3 rounded-xl border border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#151F32] transition-all ${
-                                  step.link ? 'hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-2xs cursor-pointer' : 'opacity-70'
+                                className={`p-3.5 rounded-xl border border-slate-200/80 dark:border-[#263449] bg-white dark:bg-[#151F32] transition-all duration-200 ${
+                                  step.link ? 'hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-xs cursor-pointer' : 'opacity-70'
                                 } flex items-start gap-3`}
                               >
                                 <div
-                                  className={`p-2 rounded-lg ${
+                                  className={`p-2.5 rounded-xl ${
                                     step.ready
                                       ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
                                       : 'bg-slate-100 dark:bg-[#1B263A] text-slate-400 dark:text-[#64748B]'
@@ -362,7 +439,7 @@ const Dashboard = () => {
                                       {step.title}
                                     </span>
                                     <span
-                                      className={`text-[9px] font-mono font-medium px-1.5 py-0.2 rounded ${
+                                      className={`text-[9px] font-mono font-medium px-1.5 py-0.5 rounded-md ${
                                         step.status === 'Active'
                                           ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-500/20'
                                           : 'bg-slate-100 dark:bg-[#1B263A] text-slate-500 dark:text-[#94A3B8] border border-slate-200/60 dark:border-[#263449]'
@@ -371,7 +448,7 @@ const Dashboard = () => {
                                       {step.status}
                                     </span>
                                   </div>
-                                  <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] mt-0.5 leading-tight line-clamp-2">
+                                  <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] mt-1 leading-tight line-clamp-2">
                                     {step.desc}
                                   </p>
                                 </div>
@@ -382,7 +459,8 @@ const Dashboard = () => {
                       </div>
                     </CardContent>
                   </Card>
-                )}
+                </>
+              )}
 
               </div>
 
@@ -423,7 +501,7 @@ const Dashboard = () => {
                                   Role: {inv.role}
                                 </span>
                               </div>
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-500/20 shrink-0">
+                              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-500/20 shrink-0">
                                 PENDING
                               </span>
                             </div>

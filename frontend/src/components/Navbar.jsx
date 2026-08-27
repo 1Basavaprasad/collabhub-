@@ -127,12 +127,30 @@ const Navbar = ({ onToggleSidebar }) => {
         </>
       );
     }
+    if (location.pathname.startsWith('/projects')) {
+      return (
+        <>
+          <span className="text-slate-400 dark:text-[#94A3B8]">Workspace</span>
+          <span className="text-slate-300 dark:text-[#263449]">/</span>
+          <span className="text-slate-700 dark:text-[#F8FAFC] font-medium">Projects</span>
+        </>
+      );
+    }
+    if (location.pathname.startsWith('/tasks')) {
+      return (
+        <>
+          <span className="text-slate-400 dark:text-[#94A3B8]">Workspace</span>
+          <span className="text-slate-300 dark:text-[#263449]">/</span>
+          <span className="text-slate-700 dark:text-[#F8FAFC] font-medium">My Tasks</span>
+        </>
+      );
+    }
     if (location.pathname.startsWith('/profile')) {
       return (
         <>
           <span className="text-slate-400 dark:text-[#94A3B8]">Workspace</span>
           <span className="text-slate-300 dark:text-[#263449]">/</span>
-          <span className="text-slate-700 dark:text-[#F8FAFC] font-medium">User Profile</span>
+          <span className="text-slate-700 dark:text-[#F8FAFC] font-medium">Profile</span>
         </>
       );
     }
@@ -156,7 +174,7 @@ const Navbar = ({ onToggleSidebar }) => {
 
   return (
     <>
-      <header className="shrink-0 sticky top-0 z-30 w-full border-b border-slate-200/80 dark:border-[#263449] bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-md shadow-xs">
+      <header className="shrink-0 sticky top-0 z-30 w-full border-b border-slate-200/80 dark:border-[#263449] bg-white/95 dark:bg-[#0B1120]/90 backdrop-blur-md shadow-[0_1px_3px_0_rgba(15,23,42,0.02)]">
         <div className="mx-auto flex h-14 w-full items-center justify-between px-4 sm:px-6 lg:px-8">
           
           {/* Left: Hamburger + Brand + Breadcrumbs */}
@@ -164,7 +182,7 @@ const Navbar = ({ onToggleSidebar }) => {
             {onToggleSidebar && (
               <button
                 onClick={onToggleSidebar}
-                className="rounded-lg p-1.5 text-slate-500 dark:text-[#94A3B8] hover:bg-slate-100 dark:hover:bg-[#202D43] hover:text-slate-900 dark:hover:text-[#F8FAFC] lg:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer"
+                className="rounded-xl p-1.5 text-slate-500 dark:text-[#94A3B8] hover:bg-slate-100 dark:hover:bg-[#202D43] hover:text-slate-900 dark:hover:text-[#F8FAFC] lg:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer transition-colors"
                 aria-label="Toggle navigation menu"
               >
                 <Menu className="h-5 w-5" />
@@ -172,7 +190,7 @@ const Navbar = ({ onToggleSidebar }) => {
             )}
 
             <Link to="/dashboard" className="flex items-center gap-2.5 group shrink-0">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 shadow-xs text-white font-bold text-sm">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 shadow-2xs text-white font-bold text-sm">
                 <Layers className="h-4 w-4" />
               </div>
               <span className="text-base font-semibold tracking-tight text-slate-900 dark:text-[#F8FAFC] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
@@ -191,7 +209,7 @@ const Navbar = ({ onToggleSidebar }) => {
                 <button
                   type="button"
                   onClick={() => setIsCompanyMenuOpen(!isCompanyMenuOpen)}
-                  className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-[#151F32] border border-slate-200/80 dark:border-[#263449] text-xs font-medium text-slate-700 dark:text-[#CBD5E1] hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-[#33435c] transition-colors cursor-pointer"
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[#F4F6FA] dark:bg-[#151F32] border border-slate-200/80 dark:border-[#263449] text-xs font-medium text-slate-700 dark:text-[#CBD5E1] hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-[#33435c] hover:bg-white dark:hover:bg-[#1B263A] transition-all cursor-pointer"
                 >
                   <Building className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
                   <span className="max-w-[120px] truncate font-medium">{company.name}</span>
@@ -199,8 +217,8 @@ const Navbar = ({ onToggleSidebar }) => {
                 </button>
 
                 {isCompanyMenuOpen && (
-                  <div className="absolute left-0 mt-1.5 w-60 rounded-xl bg-white dark:bg-[#1B263A] border border-slate-200/80 dark:border-[#263449] shadow-lg py-1 z-40 divide-y divide-slate-100 dark:divide-[#263449] animate-scale-in">
-                    <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] font-mono">
+                  <div className="absolute left-0 mt-1.5 w-60 rounded-2xl bg-white dark:bg-[#1B263A] border border-slate-200/80 dark:border-[#263449] shadow-lg py-1.5 z-40 divide-y divide-slate-100 dark:divide-[#263449] animate-scale-in">
+                    <div className="px-3.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-[#94A3B8] font-mono">
                       Switch Workspace
                     </div>
                     <div className="py-1 max-h-48 overflow-y-auto">
@@ -212,7 +230,7 @@ const Navbar = ({ onToggleSidebar }) => {
                             selectCompany(c);
                             setIsCompanyMenuOpen(false);
                           }}
-                          className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                          className={`w-full text-left px-3.5 py-2 text-xs flex items-center justify-between transition-colors cursor-pointer ${
                             c.id === company.id
                               ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-medium'
                               : 'text-slate-700 dark:text-[#CBD5E1] hover:bg-slate-50 dark:hover:bg-[#202D43] hover:text-slate-900 dark:hover:text-white'
@@ -236,13 +254,13 @@ const Navbar = ({ onToggleSidebar }) => {
             <button
               type="button"
               onClick={() => setIsSearchOpen(true)}
-              className="w-full flex items-center justify-between pl-3 pr-2 py-1.5 text-xs bg-slate-100/70 dark:bg-[#151F32] hover:bg-slate-100 dark:hover:bg-[#1B263A] border border-slate-200/80 dark:border-[#263449] hover:border-slate-300 dark:hover:border-[#33435c] rounded-lg text-slate-400 dark:text-[#94A3B8] hover:text-slate-600 dark:hover:text-[#CBD5E1] transition-all shadow-xs cursor-pointer group"
+              className="w-full flex items-center justify-between pl-3.5 pr-2 py-1.5 text-xs bg-[#F4F6FA] dark:bg-[#151F32] hover:bg-white dark:hover:bg-[#1B263A] border border-slate-200/80 dark:border-[#263449] hover:border-slate-300 dark:hover:border-[#33435c] rounded-xl text-slate-400 dark:text-[#94A3B8] hover:text-slate-600 dark:hover:text-[#CBD5E1] transition-all shadow-2xs cursor-pointer group"
             >
               <div className="flex items-center gap-2">
                 <Search className="h-3.5 w-3.5 text-slate-400 dark:text-[#94A3B8] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
                 <span>Search in workspace...</span>
               </div>
-              <kbd className="inline-block px-1.5 py-0.5 text-[10px] font-mono text-slate-500 dark:text-[#94A3B8] bg-white dark:bg-[#1B263A] border border-slate-200 dark:border-[#263449] rounded shadow-2xs">
+              <kbd className="inline-block px-1.5 py-0.5 text-[10px] font-mono text-slate-500 dark:text-[#94A3B8] bg-white dark:bg-[#1B263A] border border-slate-200 dark:border-[#263449] rounded-md shadow-2xs">
                 ⌘K
               </kbd>
             </button>
@@ -254,7 +272,7 @@ const Navbar = ({ onToggleSidebar }) => {
             <button
               type="button"
               onClick={() => setIsSearchOpen(true)}
-              className="sm:hidden p-2 rounded-lg text-slate-500 dark:text-[#94A3B8] hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-[#202D43] transition-colors cursor-pointer"
+              className="sm:hidden p-2 rounded-xl text-slate-500 dark:text-[#94A3B8] hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-[#202D43] transition-colors cursor-pointer"
               title="Search workspace (Ctrl+K)"
               aria-label="Search workspace"
             >
@@ -266,7 +284,7 @@ const Navbar = ({ onToggleSidebar }) => {
               <button
                 type="button"
                 onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
-                className="p-2 rounded-lg border border-slate-200/80 dark:border-[#263449] bg-slate-100/70 dark:bg-[#151F32] text-slate-600 dark:text-[#CBD5E1] hover:border-slate-300 dark:hover:border-[#33435c] hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                className="p-2 rounded-xl border border-slate-200/80 dark:border-[#263449] bg-[#F4F6FA] dark:bg-[#151F32] text-slate-600 dark:text-[#CBD5E1] hover:border-slate-300 dark:hover:border-[#33435c] hover:bg-white dark:hover:bg-[#1B263A] hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
                 title={`Current theme: ${theme} (${resolvedTheme})`}
                 aria-label="Change theme"
               >
@@ -280,7 +298,7 @@ const Navbar = ({ onToggleSidebar }) => {
               </button>
 
               {isThemeMenuOpen && (
-                <div className="absolute right-0 mt-1.5 w-36 rounded-xl bg-white dark:bg-[#1B263A] border border-slate-200/80 dark:border-[#263449] shadow-xl py-1 z-40 animate-scale-in text-xs">
+                <div className="absolute right-0 mt-1.5 w-36 rounded-2xl bg-white dark:bg-[#1B263A] border border-slate-200/80 dark:border-[#263449] shadow-xl py-1.5 z-40 animate-scale-in text-xs">
                   <div className="px-3 py-1 text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400 dark:text-[#94A3B8]">
                     Theme
                   </div>
@@ -347,7 +365,7 @@ const Navbar = ({ onToggleSidebar }) => {
               type="button"
               onClick={handleHealthRefresh}
               title="TeamX API Status (Click to refresh)"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200/80 dark:border-[#263449] bg-slate-100/70 dark:bg-[#151F32] text-[11px] font-medium text-slate-600 dark:text-[#CBD5E1] hover:border-slate-300 dark:hover:border-[#33435c] hover:text-slate-900 dark:hover:text-white cursor-pointer transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200/80 dark:border-[#263449] bg-[#F4F6FA] dark:bg-[#151F32] text-[11px] font-medium text-slate-600 dark:text-[#CBD5E1] hover:border-slate-300 dark:hover:border-[#33435c] hover:bg-white dark:hover:bg-[#1B263A] hover:text-slate-900 dark:hover:text-white cursor-pointer transition-all"
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
@@ -370,7 +388,7 @@ const Navbar = ({ onToggleSidebar }) => {
                 <button
                   type="button"
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                  className="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-[#202D43] transition-colors cursor-pointer focus:outline-none"
+                  className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100/80 dark:hover:bg-[#202D43] transition-colors cursor-pointer focus:outline-none"
                   aria-expanded={isProfileMenuOpen}
                   aria-haspopup="true"
                 >
@@ -387,7 +405,7 @@ const Navbar = ({ onToggleSidebar }) => {
                 </button>
 
                 {isProfileMenuOpen && (
-                  <div className="absolute right-0 mt-1.5 w-56 rounded-xl bg-white dark:bg-[#1B263A] border border-slate-200/80 dark:border-[#263449] shadow-xl py-1 z-40 divide-y divide-slate-100 dark:divide-[#263449] animate-scale-in">
+                  <div className="absolute right-0 mt-1.5 w-56 rounded-2xl bg-white dark:bg-[#1B263A] border border-slate-200/80 dark:border-[#263449] shadow-xl py-1.5 z-40 divide-y divide-slate-100 dark:divide-[#263449] animate-scale-in">
                     <div className="px-3.5 py-2.5">
                       <p className="text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] truncate">
                         {user.full_name || user.username}

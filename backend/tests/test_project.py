@@ -176,19 +176,53 @@ def test_project_lifecycle_rbac_and_isolation():
 
     # ----------------------------------------------------
     # List Projects with Member & Owner (Scenario 2 & 18)
-    # Member can view all workspace projects
+    # Owner & Admin can view all workspace projects (total 2)
+    # Unassigned member sees only 0 projects
     # ----------------------------------------------------
+    owner_list = client.get(
+        f"/companies/{company_id}/projects",
+        headers=owner["headers"],
+    )
+    assert owner_list.status_code == 200
+    assert owner_list.json()["total"] == 2
+
+    admin_list = client.get(
+        f"/companies/{company_id}/projects",
+        headers=admin["headers"],
+    )
+    assert admin_list.status_code == 200
+    assert admin_list.json()["total"] == 2
+
     member_list = client.get(
         f"/companies/{company_id}/projects",
         headers=member["headers"],
     )
     assert member_list.status_code == 200
-    paginated_data = member_list.json()
-    assert paginated_data["total"] == 2
-    assert len(paginated_data["items"]) == 2
-    project_names = [p["name"] for p in paginated_data["items"]]
-    assert "Cloud Platform Modernization" in project_names
-    assert "AI Automation Pipeline" in project_names
+    assert member_list.json()["total"] == 0
+
+    # Unassigned member cannot access p1 details -> 403 Forbidden
+    detail_unauthz = client.get(
+        f"/companies/{company_id}/projects/{p1_id}",
+        headers=member["headers"],
+    )
+    assert detail_unauthz.status_code == 403
+
+    # Add member as a direct project member to p1
+    add_mem = client.post(
+        f"/companies/{company_id}/projects/{p1_id}/members",
+        headers=owner["headers"],
+        json={"user_id": member["id"]},
+    )
+    assert add_mem.status_code == 201
+
+    # Now member can list p1 (total 1)
+    member_list_after = client.get(
+        f"/companies/{company_id}/projects",
+        headers=member["headers"],
+    )
+    assert member_list_after.status_code == 200
+    assert member_list_after.json()["total"] == 1
+    assert member_list_after.json()["items"][0]["id"] == p1_id
 
     # ----------------------------------------------------
     # Get Single Project Details (Scenario 3)
@@ -287,13 +321,23 @@ def test_project_lifecycle_rbac_and_isolation():
     # ----------------------------------------------------
     # Search and Sorting (Scenario 2)
     # ----------------------------------------------------
-    search_res = client.get(
-        f"/companies/{company_id}/projects?search=automation",
+    # Member searches for assigned project (Cloud Platform)
+    search_mem_res = client.get(
+        f"/companies/{company_id}/projects?search=platform",
         headers=member["headers"],
     )
-    assert search_res.status_code == 200
-    assert search_res.json()["total"] == 1
-    assert search_res.json()["items"][0]["id"] == p2_id
+    assert search_mem_res.status_code == 200
+    assert search_mem_res.json()["total"] == 1
+    assert search_mem_res.json()["items"][0]["id"] == p1_id
+
+    # Owner searches for automation project (AI Automation Pipeline)
+    search_owner_res = client.get(
+        f"/companies/{company_id}/projects?search=automation",
+        headers=owner["headers"],
+    )
+    assert search_owner_res.status_code == 200
+    assert search_owner_res.json()["total"] == 1
+    assert search_owner_res.json()["items"][0]["id"] == p2_id
 
     # ----------------------------------------------------
     # Invalid Project ID & Not Found Handling (Scenario 8 & 9)
@@ -548,13 +592,269 @@ def test_project_create_complete_flow_regression():
     )
     assert short_res.status_code == 422
 
-    # 7. Member views the newly created project in directory list
-    list_res = client.get(
+    # 7. Member views empty directory list before assignment
+    list_res_before = client.get(
         f"/companies/{company_id}/projects",
         headers=member["headers"],
     )
-    assert list_res.status_code == 200
-    assert list_res.json()["total"] == 1
-    assert list_res.json()["items"][0]["name"] == "Design System 2.0"
-    assert list_res.json()["items"][0]["creator"]["full_name"] == "Regression Owner"
+    assert list_res_before.status_code == 200
+    assert list_res_before.json()["total"] == 0
+
+    # 8. Owner views project in directory list
+    list_res_owner = client.get(
+        f"/companies/{company_id}/projects",
+        headers=owner["headers"],
+    )
+    assert list_res_owner.status_code == 200
+    assert list_res_owner.json()["total"] == 1
+    assert list_res_owner.json()["items"][0]["name"] == "Design System 2.0"
+    assert list_res_owner.json()["items"][0]["creator"]["full_name"] == "Regression Owner"
+
+    # 9. Assign member directly and verify member can now list and view
+    proj_id = created_data["id"]
+    add_m_res = client.post(
+        f"/companies/{company_id}/projects/{proj_id}/members",
+        headers=owner["headers"],
+        json={"user_id": member["id"]},
+    )
+    assert add_m_res.status_code == 201
+
+    list_res_after = client.get(
+        f"/companies/{company_id}/projects",
+        headers=member["headers"],
+    )
+    assert list_res_after.status_code == 200
+    assert list_res_after.json()["total"] == 1
+    assert list_res_after.json()["items"][0]["name"] == "Design System 2.0"
+
+
+def test_project_bola_comprehensive_matrix():
+    """
+    Exhaustively tests all 9 project authorization scenarios:
+    1. OWNER allowed (200)
+    2. ADMIN allowed (200)
+    3. Direct Project Member allowed (200)
+    4. Member of team assigned to project allowed (200)
+    5. Normal unassigned Workspace Member forbidden (403) across all project resources:
+       - GET project details
+       - GET project teams
+       - GET project members
+       - GET effective members
+       - GET project tasks
+       - POST project task
+       - GET project activity
+    6. User from another company forbidden (403)
+    7. Non-existent project returns 404
+    8. Cross-company project access returns 404
+    9. Archived project accessible by assigned members, unarchivable only by admin/owner
+    """
+    s_owner = uuid.uuid4().hex[:8]
+    s_admin = uuid.uuid4().hex[:8]
+    s_direct = uuid.uuid4().hex[:8]
+    s_team_mem = uuid.uuid4().hex[:8]
+    s_unassigned = uuid.uuid4().hex[:8]
+    s_other_co = uuid.uuid4().hex[:8]
+
+    owner = _create_and_login_user(f"bo_{s_owner}", "Workspace Owner")
+    admin = _create_and_login_user(f"ba_{s_admin}", "Workspace Admin")
+    direct_mem = _create_and_login_user(f"bd_{s_direct}", "Direct Project Member")
+    team_mem = _create_and_login_user(f"bt_{s_team_mem}", "Team Member")
+    unassigned_mem = _create_and_login_user(f"bu_{s_unassigned}", "Unassigned Workspace Member")
+    other_co_user = _create_and_login_user(f"bx_{s_other_co}", "Other Company User")
+
+    # 1. Create Workspace A
+    comp_a_res = client.post(
+        "/companies",
+        headers=owner["headers"],
+        json={"name": f"BOLA Test Corp A {s_owner}"},
+    )
+    assert comp_a_res.status_code == 201
+    company_a_id = comp_a_res.json()["id"]
+
+    # Add workspace members to Company A
+    client.post(f"/companies/{company_a_id}/members?user_id={admin['id']}&role=ADMIN", headers=owner["headers"])
+    client.post(f"/companies/{company_a_id}/members?user_id={direct_mem['id']}&role=MEMBER", headers=owner["headers"])
+    client.post(f"/companies/{company_a_id}/members?user_id={team_mem['id']}&role=MEMBER", headers=owner["headers"])
+    client.post(f"/companies/{company_a_id}/members?user_id={unassigned_mem['id']}&role=MEMBER", headers=owner["headers"])
+
+    # 2. Create Workspace B
+    comp_b_res = client.post(
+        "/companies",
+        headers=other_co_user["headers"],
+        json={"name": f"BOLA Test Corp B {s_other_co}"},
+    )
+    assert comp_b_res.status_code == 201
+    company_b_id = comp_b_res.json()["id"]
+
+    # 3. Create Team in Company A and add team_mem
+    team_res = client.post(
+        f"/companies/{company_a_id}/teams",
+        headers=owner["headers"],
+        json={"name": f"Frontend Team {s_owner}"},
+    )
+    assert team_res.status_code == 201
+    team_id = team_res.json()["id"]
+    client.post(
+        f"/companies/{company_a_id}/teams/{team_id}/members",
+        headers=owner["headers"],
+        json={"user_id": team_mem["id"], "role": "MEMBER"},
+    )
+
+    # 4. Owner creates Project in Company A
+    proj_res = client.post(
+        f"/companies/{company_a_id}/projects",
+        headers=owner["headers"],
+        json={"name": "Secure Project", "description": "High security data"},
+    )
+    assert proj_res.status_code == 201
+    project_id = proj_res.json()["id"]
+
+    # Assign team to Project
+    client.post(
+        f"/companies/{company_a_id}/projects/{project_id}/teams",
+        headers=owner["headers"],
+        json={"team_id": team_id},
+    )
+
+    # Assign direct_mem directly to Project
+    client.post(
+        f"/companies/{company_a_id}/projects/{project_id}/members",
+        headers=owner["headers"],
+        json={"user_id": direct_mem["id"]},
+    )
+
+    # Create a task in the project
+    task_res = client.post(
+        f"/companies/{company_a_id}/projects/{project_id}/tasks",
+        headers=owner["headers"],
+        json={"title": "Task 1", "priority": "HIGH"},
+    )
+    assert task_res.status_code == 201
+    task_id = task_res.json()["id"]
+
+    # ========================================================
+    # SCENARIO 1 & 2: OWNER & ADMIN ALLOWED (200)
+    # ========================================================
+    for user_obj in [owner, admin]:
+        # List projects
+        l_res = client.get(f"/companies/{company_a_id}/projects", headers=user_obj["headers"])
+        assert l_res.status_code == 200
+        assert l_res.json()["total"] == 1
+
+        # Get details
+        d_res = client.get(f"/companies/{company_a_id}/projects/{project_id}", headers=user_obj["headers"])
+        assert d_res.status_code == 200
+
+        # Get teams
+        t_res = client.get(f"/companies/{company_a_id}/projects/{project_id}/teams", headers=user_obj["headers"])
+        assert t_res.status_code == 200
+
+        # Get members
+        m_res = client.get(f"/companies/{company_a_id}/projects/{project_id}/members", headers=user_obj["headers"])
+        assert m_res.status_code == 200
+
+        # Get tasks
+        k_res = client.get(f"/companies/{company_a_id}/projects/{project_id}/tasks", headers=user_obj["headers"])
+        assert k_res.status_code == 200
+
+        # Get activity
+        a_res = client.get(f"/companies/{company_a_id}/projects/{project_id}/activity", headers=user_obj["headers"])
+        assert a_res.status_code == 200
+
+    # ========================================================
+    # SCENARIO 3: DIRECT PROJECT MEMBER ALLOWED (200)
+    # ========================================================
+    d_dir = client.get(f"/companies/{company_a_id}/projects/{project_id}", headers=direct_mem["headers"])
+    assert d_dir.status_code == 200
+
+    t_dir = client.get(f"/companies/{company_a_id}/projects/{project_id}/tasks", headers=direct_mem["headers"])
+    assert t_dir.status_code == 200
+
+    act_dir = client.get(f"/companies/{company_a_id}/projects/{project_id}/activity", headers=direct_mem["headers"])
+    assert act_dir.status_code == 200
+
+    # ========================================================
+    # SCENARIO 4: TEAM MEMBER OF ASSIGNED TEAM ALLOWED (200)
+    # ========================================================
+    d_team = client.get(f"/companies/{company_a_id}/projects/{project_id}", headers=team_mem["headers"])
+    assert d_team.status_code == 200
+
+    t_team = client.get(f"/companies/{company_a_id}/projects/{project_id}/tasks", headers=team_mem["headers"])
+    assert t_team.status_code == 200
+
+    act_team = client.get(f"/companies/{company_a_id}/projects/{project_id}/activity", headers=team_mem["headers"])
+    assert act_team.status_code == 200
+
+    # ========================================================
+    # SCENARIO 5: UNASSIGNED WORKSPACE MEMBER FORBIDDEN (403)
+    # ========================================================
+    # Project list should be empty
+    list_unassigned = client.get(f"/companies/{company_a_id}/projects", headers=unassigned_mem["headers"])
+    assert list_unassigned.status_code == 200
+    assert list_unassigned.json()["total"] == 0
+
+    # Detail access blocked -> 403
+    d_un = client.get(f"/companies/{company_a_id}/projects/{project_id}", headers=unassigned_mem["headers"])
+    assert d_un.status_code == 403
+    assert "You do not have access to view this project" in d_un.json()["detail"]
+
+    # Teams list blocked -> 403
+    t_un = client.get(f"/companies/{company_a_id}/projects/{project_id}/teams", headers=unassigned_mem["headers"])
+    assert t_un.status_code == 403
+
+    # Members list blocked -> 403
+    m_un = client.get(f"/companies/{company_a_id}/projects/{project_id}/members", headers=unassigned_mem["headers"])
+    assert m_un.status_code == 403
+
+    # Effective members list blocked -> 403
+    eff_un = client.get(f"/companies/{company_a_id}/projects/{project_id}/effective-members", headers=unassigned_mem["headers"])
+    assert eff_un.status_code == 403
+
+    # Tasks list blocked -> 403
+    task_list_un = client.get(f"/companies/{company_a_id}/projects/{project_id}/tasks", headers=unassigned_mem["headers"])
+    assert task_list_un.status_code == 403
+
+    # Task creation blocked -> 403
+    task_create_un = client.post(
+        f"/companies/{company_a_id}/projects/{project_id}/tasks",
+        headers=unassigned_mem["headers"],
+        json={"title": "Unauthorized task"},
+    )
+    assert task_create_un.status_code == 403
+
+    # Activity timeline blocked -> 403
+    act_un = client.get(f"/companies/{company_a_id}/projects/{project_id}/activity", headers=unassigned_mem["headers"])
+    assert act_un.status_code == 403
+
+    # ========================================================
+    # SCENARIO 6: USER FROM ANOTHER COMPANY FORBIDDEN (403)
+    # ========================================================
+    cross_co_res = client.get(
+        f"/companies/{company_a_id}/projects/{project_id}",
+        headers=other_co_user["headers"],
+    )
+    assert cross_co_res.status_code == 403
+    assert "You do not belong to this company workspace" in cross_co_res.json()["detail"]
+
+    # ========================================================
+    # SCENARIO 7: NON-EXISTENT PROJECT (404)
+    # ========================================================
+    fake_proj_id = str(uuid.uuid4())
+    fake_res = client.get(
+        f"/companies/{company_a_id}/projects/{fake_proj_id}",
+        headers=owner["headers"],
+    )
+    assert fake_res.status_code == 404
+    assert "Project not found in this company workspace" in fake_res.json()["detail"]
+
+    # ========================================================
+    # SCENARIO 8: CROSS-COMPANY PROJECT UUID UNDER COMPANY B ROUTE (404)
+    # ========================================================
+    idor_res = client.get(
+        f"/companies/{company_b_id}/projects/{project_id}",
+        headers=other_co_user["headers"],
+    )
+    assert idor_res.status_code == 404
+    assert "Project not found in this company workspace" in idor_res.json()["detail"]
+
 

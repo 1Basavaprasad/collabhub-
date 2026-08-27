@@ -5,8 +5,11 @@ from pathlib import Path
 # Add backend directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# pyrefly: ignore [missing-import]
 from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+# pyrefly: ignore [missing-import]
+from sqlalchemy import pool 
+
 
 from alembic import context
 
