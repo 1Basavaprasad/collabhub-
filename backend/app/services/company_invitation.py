@@ -23,12 +23,16 @@ from app.repositories.company_invitation import (
     get_invitation_by_token_hash_for_update,
     get_pending_invitation,
     get_pending_invitation_by_token_hash,
+    get_pending_invitations_for_user_email,
     mark_invitation_accepted,
+    mark_invitation_declined,
     mark_invitation_expired,
     mark_invitation_revoked,
 )
 from app.repositories.user import get_user_by_email, get_user_by_id
+from app.schemas.notification import UserInvitationResponse, InvitationActionResponse
 from app.services.email import send_company_invitation_email
+from app.services.notification import notify_company_invitation
 
 logger = logging.getLogger(__name__)
 
@@ -231,6 +235,21 @@ def create_company_invitation_service(
             designation=normalized_designation,
             department=normalized_department,
         )
+
+    # 15. If the invited email belongs to an existing registered user, create an in-app notification
+    existing_user = get_user_by_email(db, normalized_email)
+    if existing_user:
+        try:
+            notify_company_invitation(
+                db=db,
+                company_id=company.id,
+                company_name=company.name,
+                target_user_id=existing_user.id,
+                inviter_id=inviter_user_id,
+                role_name=role_str,
+            )
+        except Exception as exc:
+            logger.error(f"Failed to dispatch in-app invitation notification: {exc}")
 
     # Return raw token separately (for programmatic/test usage if needed)
     return invitation, raw_token
@@ -579,3 +598,157 @@ def revoke_company_invitation_service(
 
     revoked_invitation = mark_invitation_revoked(db, invitation)
     return revoked_invitation
+
+
+def get_my_pending_invitations_service(
+    db: Session,
+    user_email: str,
+) -> list[dict]:
+    """Retrieve all pending and valid workspace invitations for the current user's email."""
+    invitations = get_pending_invitations_for_user_email(db, user_email)
+    results = []
+
+    for inv in invitations:
+        company = inv.company
+        inviter = inv.invited_by_user
+        inviter_name = (
+            inviter.full_name
+            if inviter and inviter.full_name
+            else (inviter.username if inviter and inviter.username else "A teammate")
+        )
+        inviter_email = inviter.email if inviter else ""
+
+        results.append({
+            "id": inv.id,
+            "company_id": inv.company_id,
+            "company_name": company.name if company else "Workspace",
+            "company_logo_url": company.logo_url if company else None,
+            "inviter_id": inv.invited_by,
+            "inviter_name": inviter_name,
+            "inviter_email": inviter_email,
+            "role": inv.role,
+            "designation": inv.designation,
+            "department": inv.department,
+            "status": inv.status.value if hasattr(inv.status, "value") else str(inv.status),
+            "expires_at": inv.expires_at,
+            "created_at": inv.created_at,
+        })
+
+    return results
+
+
+def accept_in_app_invitation_service(
+    db: Session,
+    invitation_id: uuid.UUID,
+    user_id: uuid.UUID,
+    user_email: str,
+) -> dict:
+    """Accept an invitation directly inside the application for the authenticated user."""
+    invitation = get_invitation_by_id(db, invitation_id)
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found.",
+        )
+
+    if invitation.email.strip().lower() != user_email.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This invitation was sent to a different email address.",
+        )
+
+    if invitation.status == InvitationStatus.ACCEPTED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation has already been accepted.",
+        )
+
+    if invitation.status == InvitationStatus.REVOKED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation has been revoked.",
+        )
+
+    if invitation.status == InvitationStatus.DECLINED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation has already been declined.",
+        )
+
+    now = datetime.now(timezone.utc)
+    if invitation.expires_at <= now:
+        mark_invitation_expired(db, invitation)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation has expired. Please ask for a new invite.",
+        )
+
+    # Check if user is already a member of this company
+    existing_membership = get_company_membership(db, invitation.company_id, user_id)
+    if existing_membership:
+        # Mark invitation accepted since user is already a member
+        mark_invitation_accepted(db, invitation, now)
+        company = get_company_by_id(db, invitation.company_id)
+        return {
+            "message": "You are already a member of this workspace.",
+            "invitation_id": invitation.id,
+            "status": "ACCEPTED",
+            "company_id": invitation.company_id,
+            "company_name": company.name if company else "Workspace",
+        }
+
+    # Add user to company membership
+    add_company_member(
+        db=db,
+        company_id=invitation.company_id,
+        user_id=user_id,
+        role=invitation.role,
+        designation=invitation.designation,
+        department=invitation.department,
+    )
+
+    # Mark invitation as accepted
+    mark_invitation_accepted(db, invitation, now)
+    company = get_company_by_id(db, invitation.company_id)
+
+    return {
+        "message": f"Successfully joined workspace {company.name if company else ''}.",
+        "invitation_id": invitation.id,
+        "status": "ACCEPTED",
+        "company_id": invitation.company_id,
+        "company_name": company.name if company else "Workspace",
+    }
+
+
+def decline_in_app_invitation_service(
+    db: Session,
+    invitation_id: uuid.UUID,
+    user_email: str,
+) -> dict:
+    """Decline a pending invitation directly inside the application."""
+    invitation = get_invitation_by_id(db, invitation_id)
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found.",
+        )
+
+    if invitation.email.strip().lower() != user_email.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This invitation was sent to a different email address.",
+        )
+
+    if invitation.status != InvitationStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot decline an invitation with status {invitation.status}.",
+        )
+
+    mark_invitation_declined(db, invitation)
+
+    return {
+        "message": "Invitation declined.",
+        "invitation_id": invitation.id,
+        "status": "DECLINED",
+    }

@@ -34,6 +34,7 @@ from app.schemas.team_chat import (
     ChatSenderSummary,
     TeamUnreadCountResponse,
 )
+from app.services.notification import notify_chat_mention
 
 
 def _get_validated_membership(
@@ -191,6 +192,22 @@ def send_team_message_service(
         reply_to_message_id=data.reply_to_message_id,
         mentioned_user_ids=data.mentioned_user_ids,
     )
+
+    if data.mentioned_user_ids:
+        for m_uid in data.mentioned_user_ids:
+            try:
+                notify_chat_mention(
+                    db=db,
+                    team_id=team.id,
+                    team_name=team.name,
+                    company_id=company_id,
+                    sender_id=current_user_id,
+                    mentioned_user_id=m_uid,
+                    snippet=data.message,
+                )
+            except Exception:
+                pass
+
     return _format_message_response(msg, current_user_id)
 
 

@@ -42,6 +42,7 @@ from app.schemas.project import (
     ProjectTeamAssign,
     ProjectUpdate,
 )
+from app.services.notification import notify_project_member_added
 
 
 def _get_validated_membership(
@@ -430,7 +431,21 @@ def add_project_member_service(
             detail="User is already a direct member of this project.",
         )
 
-    return add_project_member(db, project_id, data.user_id)
+    member = add_project_member(db, project_id, data.user_id)
+
+    try:
+        notify_project_member_added(
+            db=db,
+            project_id=project.id,
+            project_name=project.name,
+            company_id=company_id,
+            actor_id=current_user_id,
+            target_user_id=data.user_id,
+        )
+    except Exception:
+        pass
+
+    return member
 
 
 def list_project_members_service(

@@ -40,6 +40,7 @@ from app.schemas.team import (
     TeamUpdate,
     TransferLeadershipRequest,
 )
+from app.services.notification import notify_team_member_added
 
 
 def _get_validated_membership(
@@ -425,6 +426,18 @@ def add_team_member_service(
         details=f"Member added with role {data.role.value}.",
     )
 
+    try:
+        notify_team_member_added(
+            db=db,
+            team_id=team.id,
+            team_name=team.name,
+            company_id=company_id,
+            actor_id=current_user_id,
+            target_user_id=data.user_id,
+        )
+    except Exception:
+        pass
+
     return member
 
 
@@ -477,6 +490,19 @@ def batch_add_team_members_service(
         action="MEMBER_ADDED",
         details=f"{len(added)} members added to the team.",
     )
+
+    for m in added:
+        try:
+            notify_team_member_added(
+                db=db,
+                team_id=team.id,
+                team_name=team.name,
+                company_id=company_id,
+                actor_id=current_user_id,
+                target_user_id=m.user_id,
+            )
+        except Exception:
+            pass
 
     return added
 

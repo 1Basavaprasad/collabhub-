@@ -179,5 +179,36 @@ def get_company_invitations(
         .limit(limit)
     )
     items = list(db.scalars(items_statement).all())
-
     return items, total
+
+
+def get_pending_invitations_for_user_email(
+    db: Session,
+    email: str,
+) -> list[CompanyInvitation]:
+    now = datetime.now()
+    return list(
+        db.scalars(
+            select(CompanyInvitation)
+            .options(
+                joinedload(CompanyInvitation.company),
+                joinedload(CompanyInvitation.invited_by_user),
+            )
+            .where(
+                func.lower(CompanyInvitation.email) == email.strip().lower(),
+                CompanyInvitation.status == InvitationStatus.PENDING,
+                CompanyInvitation.expires_at > now,
+            )
+            .order_by(CompanyInvitation.created_at.desc())
+        ).all()
+    )
+
+
+def mark_invitation_declined(
+    db: Session,
+    invitation: CompanyInvitation,
+) -> CompanyInvitation:
+    invitation.status = InvitationStatus.DECLINED
+    db.commit()
+    db.refresh(invitation)
+    return invitation

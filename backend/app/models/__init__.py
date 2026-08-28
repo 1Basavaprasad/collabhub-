@@ -18,6 +18,8 @@ from app.models.project_activity import ProjectActivity
 from app.models.project_team import ProjectTeam
 from app.models.project_member import ProjectMember
 from app.models.task import Task, TaskStatus, TaskPriority
+from app.models.notification import Notification, NotificationEntityType
+from app.models.notification_preference import NotificationPreference
 
 __all__ = [
     "Base",
@@ -44,4 +46,7 @@ __all__ = [
     "Task",
     "TaskStatus",
     "TaskPriority",
+    "Notification",
+    "NotificationEntityType",
+    "NotificationPreference",
 ]

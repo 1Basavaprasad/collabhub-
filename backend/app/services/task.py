@@ -25,6 +25,11 @@ from app.repositories.task import (
     update_task_status,
 )
 from app.schemas.task import TaskCreate, TaskStatusUpdate, TaskUpdate
+from app.services.notification import (
+    notify_task_assigned,
+    notify_task_completed,
+    notify_task_reassigned,
+)
 
 
 def _get_validated_membership(
@@ -118,7 +123,7 @@ def create_task_service(
                 detail="Assignee must be an assigned member of this project (direct or via team).",
             )
 
-    return create_task(
+    task = create_task(
         db=db,
         project_id=project.id,
         company_id=company_id,
@@ -131,6 +136,14 @@ def create_task_service(
         due_date=data.due_date,
         position=data.position,
     )
+
+    if data.assignee_id is not None:
+        try:
+            notify_task_assigned(db, task, current_user_id, data.assignee_id)
+        except Exception:
+            pass
+
+    return task
 
 
 def get_task_service(
@@ -247,12 +260,19 @@ def complete_task_service(
             detail="Only the assigned member or a project manager can mark this task as completed.",
         )
 
-    return update_task_status(
+    completed_task = update_task_status(
         db=db,
         task=task,
         status=TaskStatus.DONE,
         current_user_id=current_user_id,
     )
+
+    try:
+        notify_task_completed(db, completed_task, current_user_id)
+    except Exception:
+        pass
+
+    return completed_task
 
 
 def update_task_service(
@@ -287,6 +307,8 @@ def update_task_service(
             detail="You do not have permission to update this task.",
         )
 
+    old_assignee_id = task.assignee_id
+
     # Validate new assignee if provided
     fields_set = data.model_fields_set
     if "assignee_id" in fields_set and data.assignee_id is not None:
@@ -297,7 +319,7 @@ def update_task_service(
                 detail="Assignee must be an assigned member of this project (direct or via team).",
             )
 
-    return update_task(
+    updated = update_task(
         db=db,
         task=task,
         title=data.title,
@@ -310,6 +332,14 @@ def update_task_service(
         fields_to_update=fields_set,
         current_user_id=current_user_id,
     )
+
+    if "assignee_id" in fields_set and data.assignee_id is not None and data.assignee_id != old_assignee_id:
+        try:
+            notify_task_reassigned(db, updated, current_user_id, data.assignee_id)
+        except Exception:
+            pass
+
+    return updated
 
 
 def update_task_status_service(
@@ -336,13 +366,23 @@ def update_task_status_service(
             detail="Task not found in this project.",
         )
 
-    return update_task_status(
+    old_status = task.status
+
+    updated = update_task_status(
         db=db,
         task=task,
         status=data.status,
         position=data.position,
         current_user_id=current_user_id,
     )
+
+    if data.status == TaskStatus.DONE and old_status != TaskStatus.DONE:
+        try:
+            notify_task_completed(db, updated, current_user_id)
+        except Exception:
+            pass
+
+    return updated
 
 
 def delete_task_service(

@@ -21,6 +21,7 @@ class InvitationStatus(str, enum.Enum):
     ACCEPTED = "ACCEPTED"
     EXPIRED = "EXPIRED"
     REVOKED = "REVOKED"
+    DECLINED = "DECLINED"
 
 
 class CompanyInvitation(Base):

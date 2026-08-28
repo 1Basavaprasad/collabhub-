@@ -14,6 +14,9 @@ from app.routers.team import router as team_router
 from app.routers.project import router as project_router
 from app.routers.task import my_tasks_router, router as task_router
 from app.routers.team_chat import router as team_chat_router, team_chat_reads_router
+from app.routers.notification import router as notification_router
+from app.routers.invitation import user_invitations_router
+from app.routers.home import router as home_router
 
 # In production, documentation endpoints can be conditionally disabled unless explicitly allowed
 is_prod = settings.ENVIRONMENT.lower() == "production"
@@ -53,6 +56,9 @@ app.include_router(task_router)
 app.include_router(my_tasks_router)
 app.include_router(team_chat_router)
 app.include_router(team_chat_reads_router)
+app.include_router(notification_router)
+app.include_router(user_invitations_router)
+app.include_router(home_router)
 
 
 @app.get("/health", tags=["Health"])
